@@ -65,7 +65,6 @@ This project is licensed under the MIT License.
 
 For any questions or suggestions, feel free to reach out to the author:
 
-- **Email**: parisneoai@gmail.com
 - **Twitter**: [@ParisNeo_AI](https://twitter.com/ParisNeo_AI)
 - **Discord**: [Join our Discord](https://discord.gg/BDxacQmv)
 - **Sub-Reddit**: [r/lollms](https://www.reddit.com/r/lollms/)
