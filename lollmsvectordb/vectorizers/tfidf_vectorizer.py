@@ -13,6 +13,7 @@ from lollmsvectordb.vectorizer import Vectorizer
 
 class TFIDFVectorizer(Vectorizer):
     def __init__(self):
+        super().__init__("TFIDFVectorizer")
         self.vectorizer = SklearnTfidfVectorizer()
 
     def fit(self, data):

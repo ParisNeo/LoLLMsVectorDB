@@ -13,6 +13,7 @@ from lollmsvectordb.vectorizer import Vectorizer
 
 class Word2VecVectorizer(Vectorizer):
     def __init__(self, size=100, window=5, min_count=1, workers=4):
+        super().__init__("Word2VecVectorizer")
         self.model = Word2Vec(size=size, window=window, min_count=min_count, workers=workers)
 
     def fit(self, data):
