@@ -278,7 +278,7 @@ class VectorDatabase:
             raise ValueError("Index not built. Call build_index() before searching.")
         
         if len(self.vectors) < n_results:
-            raise ValueError(f"Expected n_neighbors <= n_samples, but n_samples = {len(self.vectors)}, n_neighbors = {n_results}")
+            n_results=len(self.vectors)
         
         query_vector = self.vectorizer.vectorize([query_data])[0]
         distances, indices = self.nn_model.kneighbors([query_vector], n_neighbors=n_results)
