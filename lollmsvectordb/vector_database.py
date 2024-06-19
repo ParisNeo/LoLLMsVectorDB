@@ -127,6 +127,7 @@ class VectorDatabase:
                 )
             ''')
             conn.commit()
+            self.set_first_vectorizer_name(self.vectorizer.name)
 
     def _hash_document(self, text: str) -> str:
         """
@@ -151,6 +152,28 @@ class VectorDatabase:
             result = cursor.fetchone()
             return result[0] if result else ""
     
+    def set_first_vectorizer_name(self, new_name: str) -> bool:
+        """
+        Sets the name of the first vectorizer in the database.
+
+        Args:
+            new_name (str): The new name to set for the first vectorizer.
+
+        Returns:
+            bool: True if the update was successful, False otherwise.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT id FROM vectorizer_info ORDER BY id LIMIT 1')
+            result = cursor.fetchone()
+            if result:
+                first_id = result[0]
+                cursor.execute('UPDATE vectorizer_info SET name = ? WHERE id = ?', (new_name, first_id))
+                conn.commit()
+                return True
+            return False
+
+
     def add_document(self, title: str, text: str, path: Union[str, Path]="unknown", chunk_size: int = 512):
         """
         Adds a document and its chunks to the database.
@@ -342,9 +365,10 @@ class VectorDatabase:
         """
         Builds the nearest neighbors index using the loaded vectors.
         """
-        if self.vectorizer.name == self.get_first_vectorizer_name():
+        if self.vectorizer.name != self.get_first_vectorizer_name():
             ASCIIColors.warning("Detected a change in the vectorizer. Revectorizing the whole database")
             self._update_vectors()
+            self.set_first_vectorizer_name(self.vectorizer.name)
         else:
             self._load_vectors()
         self.nn_model = NearestNeighbors(n_neighbors=self.n_neighbors, algorithm=self.algorithm, metric='cosine')
