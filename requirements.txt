@@ -3,3 +3,4 @@ scikit-learn
 gensim
 tiktoken
 ascii_colors
+tqdm

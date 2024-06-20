@@ -20,7 +20,6 @@ class TikTokenTokenizer(Tokenizer):
             List[int]: A list of tokens.
         """
         tokens = self.tokenizer.encode(text)
-        print(f"Text tokenized: {tokens}")
         return tokens
 
     def detokenize(self, tokens: List[int]) -> str:
@@ -34,5 +33,4 @@ class TikTokenTokenizer(Tokenizer):
             str: The detokenized text.
         """
         text = self.tokenizer.decode(tokens)
-        print(f"Tokens detokenized: {text}")
         return text
