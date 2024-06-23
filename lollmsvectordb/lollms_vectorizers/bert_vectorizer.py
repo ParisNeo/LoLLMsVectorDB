@@ -8,14 +8,16 @@ Description: Contains the BERTVectorizer class for vectorizing text data using B
 This file is part of the LoLLMsVectorDB project, a modular text-based database manager for retrieval-augmented generation (RAG), seamlessly integrating with the LoLLMs ecosystem.
 """
 
-from transformers import BertTokenizer, BertModel
+from sentence_transformers import SentenceTransformer
 import torch
 import numpy as np
 from lollmsvectordb.vectorizer import Vectorizer
+from ascii_colors import ASCIIColors
 from typing import List
+import json
 
 class BERTVectorizer(Vectorizer):
-    def __init__(self, model_name: str = 'bert-base-uncased'):
+    def __init__(self, model_name: str = 'bert-base-nli-mean-tokens'):
         """
         Initializes the BERTVectorizer with a specified BERT model.
 
@@ -23,8 +25,18 @@ class BERTVectorizer(Vectorizer):
             model_name (str): The name of the pre-trained BERT model to use.
         """
         super().__init__("BertVectorizer")
-        self.tokenizer = BertTokenizer.from_pretrained(model_name)
-        self.model = BertModel.from_pretrained(model_name)
+        # ASCIIColors.multicolor(["LollmsVectorDB>","Loading Pretrained Bert Tokenizer ..."],[ASCIIColors.color_red, ASCIIColors.color_cyan], end="", flush=True)
+        # self.tokenizer = BertTokenizer.from_pretrained(model_name)
+        ASCIIColors.success("OK")
+        ASCIIColors.multicolor(["LollmsVectorDB>",f"Loading Pretrained Bert model {model_name} ..."],[ASCIIColors.color_red, ASCIIColors.color_cyan], end="", flush=True)
+        self.model_ =  SentenceTransformer('bert-base-nli-mean-tokens')
+        ASCIIColors.success("OK")
+        self.parameters = {
+            "model_name": model_name
+        }
+        ASCIIColors.multicolor(["LollmsVectorDB>",f" Parameters:"],[ASCIIColors.color_red, ASCIIColors.color_bright_green])
+        ASCIIColors.yellow(json.dumps(self.parameters, indent=4))
+        self.fitted = True
 
     def fit(self, data: List[str]):
         """
@@ -47,12 +59,23 @@ class BERTVectorizer(Vectorizer):
             List[np.ndarray]: The list of BERT embeddings for each input text.
         """
         embeddings = []
-        for text in data:
-            inputs = self.tokenizer(text, return_tensors='pt', truncation=True, padding=True)
-            outputs = self.model(**inputs)
-            # Use the mean of the token embeddings as the sentence embedding
-            sentence_embedding = torch.mean(outputs.last_hidden_state, dim=1)
-            # Flatten the tensor to 1D
-            flattened_embedding = sentence_embedding.detach().numpy().flatten()
-            embeddings.append(flattened_embedding)
-        return embeddings
+        sentence_embeddings  = self.model_.encode(data)
+        return sentence_embeddings
+
+    def get_models(self):
+        """
+        Returns a list of model names
+        """
+        return [
+        "bert-base-uncased",
+        "bert-base-multilingual-uncased",
+        "bert-large-uncased",
+        "bert-large-uncased-whole-word-masking-finetuned-squad",
+        ]
+    def __str__(self):
+        model_name = self.parameters['model_name']
+        return f'Lollms Vector DB BERTVectorizer. Using model {model_name}.'
+
+    def __repr__(self):
+        model_name = self.parameters['model_name']
+        return f'Lollms Vector DB BERTVectorizer. Using model {model_name}.'

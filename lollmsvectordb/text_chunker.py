@@ -1,22 +1,50 @@
 from typing import List
 import tiktoken
 from pathlib import Path
+from lollmsvectordb.tokenizer import Tokenizer
+from lollmsvectordb.lollms_tokenizers.tiktoken_tokenizer import TikTokenTokenizer
+from lollmsvectordb.database_elements.document import Document
+from lollmsvectordb.database_elements.chunk import Chunk
 
 class TextChunker:
-    def __init__(self, chunk_size: int = 512):
+    def __init__(self, chunk_size: int = 512, tokenizer:Tokenizer=None):
         self.chunk_size = chunk_size
-        self.tokenizer = tiktoken.get_encoding("cl100k_base")
+        if tokenizer is None:
+            self.tokenizer = TikTokenTokenizer()
 
-    def _get_text_chunks(self, text: str) -> List[str]:
+    def remove_unnecessary_returns(self, paragraph: str) -> str:
+        """
+        Removes unnecessary line returns (more than two) from a given paragraph.
+
+        Args:
+            paragraph (str): The input paragraph with potential unnecessary line returns.
+
+        Returns:
+            str: The paragraph with unnecessary line returns removed.
+        """
+        # Split the paragraph into lines
+        lines = paragraph.splitlines()
+        
+        # Filter out empty lines and join with a single line return
+        cleaned_paragraph = '\n'.join(line for line in lines if line.strip())
+        
+        return cleaned_paragraph
+
+    def get_text_chunks(self, text: str, doc:Document, clean_chunk=True) -> List[Chunk]:
         paragraphs = text.split('\n\n')  # Split text into paragraphs
         chunks = []
         current_chunk = []
 
         current_tokens = 0
         for paragraph in paragraphs:
-            paragraph_tokens = len(self.tokenizer.encode(paragraph))
+            if clean_chunk:
+                paragraph = paragraph.strip()
+            paragraph_tokens = len(self.tokenizer.tokenize(paragraph))
             if current_tokens + paragraph_tokens > self.chunk_size:
-                chunks.append('\n\n'.join(current_chunk))
+                chunk = Chunk(doc, b'', '\n\n'.join(current_chunk), current_tokens)
+                if clean_chunk:
+                    chunk.text = self.remove_unnecessary_returns(chunk.text)
+                chunks.append(chunk)
                 current_chunk = [paragraph]
                 current_tokens = paragraph_tokens
             else:
@@ -24,7 +52,8 @@ class TextChunker:
                 current_tokens += paragraph_tokens
 
         if current_chunk:
-            chunks.append('\n\n'.join(current_chunk))
+            chunk = Chunk(doc.id, b'', '\n\n'.join(current_chunk), current_tokens)
+            chunks.append(chunk)
 
         return chunks
 

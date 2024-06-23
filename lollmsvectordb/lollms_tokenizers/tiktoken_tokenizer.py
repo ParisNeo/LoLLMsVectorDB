@@ -2,12 +2,12 @@ from pathlib import Path
 from typing import List
 from lollmsvectordb.tokenizer import Tokenizer
 import tiktoken
-
+from ascii_colors import ASCIIColors
 class TikTokenTokenizer(Tokenizer):
     def __init__(self, encoding="gpt2"):
-        super().__init__()
+        super().__init__("TiktokenTokenizer")
         self.tokenizer = tiktoken.get_encoding(encoding)
-        print("TikTokenTokenizer initialized.")
+        ASCIIColors.multicolor(["LollmsVectorDB> ", "TikTokenTokenizer initialized."], [ASCIIColors.color_red, ASCIIColors.color_green])
 
     def tokenize(self, text: str) -> List[int]:
         """

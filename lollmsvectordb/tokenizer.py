@@ -1,10 +1,10 @@
 from pathlib import Path
 from typing import List
 import tiktoken
-
+from ascii_colors import ASCIIColors
 class Tokenizer:
-    def __init__(self):
-        print("Base Tokenizer initialized. It's like a blank canvas, waiting for some color!")
+    def __init__(self, name):
+        ASCIIColors.multicolor(["LollmsVectorDB>",f" Using tokenizer {name}"],[ASCIIColors.color_red, ASCIIColors.color_cyan])
 
     def tokenize(self, text: str) -> List[int]:
         """
