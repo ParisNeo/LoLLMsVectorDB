@@ -30,7 +30,7 @@ class TextChunker:
         
         return cleaned_paragraph
 
-    def get_text_chunks(self, text: str, doc:Document, clean_chunk=True) -> List[Chunk]:
+    def get_text_chunks(self, text: str, doc:Document, clean_chunk=True, min_nb_tokens_in_chunk=10) -> List[Chunk]:
         paragraphs = text.split('\n\n')  # Split text into paragraphs
         chunks = []
         current_chunk = []
@@ -41,17 +41,18 @@ class TextChunker:
                 paragraph = paragraph.strip()
             paragraph_tokens = len(self.tokenizer.tokenize(paragraph))
             if current_tokens + paragraph_tokens > self.chunk_size:
-                chunk = Chunk(doc, b'', '\n\n'.join(current_chunk), current_tokens)
-                if clean_chunk:
-                    chunk.text = self.remove_unnecessary_returns(chunk.text)
-                chunks.append(chunk)
+                if current_tokens>min_nb_tokens_in_chunk:
+                    chunk = Chunk(doc, b'', '\n\n'.join(current_chunk), current_tokens)
+                    if clean_chunk:
+                        chunk.text = self.remove_unnecessary_returns(chunk.text)
+                    chunks.append(chunk)
                 current_chunk = [paragraph]
                 current_tokens = paragraph_tokens
             else:
                 current_chunk.append(paragraph)
                 current_tokens += paragraph_tokens
 
-        if current_chunk:
+        if current_chunk and current_tokens>min_nb_tokens_in_chunk:
             chunk = Chunk(doc.id, b'', '\n\n'.join(current_chunk), current_tokens)
             chunks.append(chunk)
 

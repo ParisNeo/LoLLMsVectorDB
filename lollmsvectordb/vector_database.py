@@ -268,7 +268,7 @@ class VectorDatabase:
 
 
 
-    def add_document(self, title: str, text: str, path: Union[str, Path]="unknown", force_update=False):
+    def add_document(self, title: str, text: str, path: Union[str, Path]="unknown", force_update=False, min_nb_tokens_in_chunk=10):
         """
         Adds a document and its chunks to the database.
 
@@ -310,7 +310,7 @@ class VectorDatabase:
                 document_id = cursor.lastrowid
 
                 ASCIIColors.multicolor(["lollmsVectorDB>","Chunking file:",f"{title}"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
-                chunks:List[Chunk]= self.textChunker.get_text_chunks(text, doc)
+                chunks:List[Chunk]= self.textChunker.get_text_chunks(text, doc, min_nb_tokens_in_chunk=min_nb_tokens_in_chunk)
 
                 for chunk in tqdm(chunks):
                     if not self.vectorizer.requires_fitting or self.vectorizer.model is not None:
@@ -648,7 +648,7 @@ class VectorDatabase:
                     doc = self.find_document_by_path(result[1])
                     if not doc:
                         doc = Document(result[2],result[0], result[1], len(self.documents))
-                    chunk = Chunk(doc, self.vectors[index], result[3], result[4],distance=distance)
+                    chunk = Chunk(doc, self.vectors[index], result[3], result[4], distance=distance)
                     results.append(chunk)
         else:
             results = [c for c in self.chunks if c.vector in self.vectors[indices]]
