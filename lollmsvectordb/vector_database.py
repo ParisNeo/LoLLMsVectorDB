@@ -337,6 +337,60 @@ class VectorDatabase:
             for chunk in chunks:
                 chunk.vector = self.vectorizer.vectorize([chunk.text])[0]
 
+    def get_document(self, document_title=None, document_path=None):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            if document_title is None and document_path is None:
+                raise ValueError("Either document_title or document_path must be provided")
+
+            query = "SELECT id, title FROM documents WHERE "
+            params = []
+
+            if document_title:
+                query += "title = ?"
+                params.append(document_title)
+            elif document_path:
+                query += "path = ?"
+                params.append(document_path)
+
+            cursor.execute(query, params)
+            documents = cursor.fetchall()
+
+            if not documents:
+                return "No documents found."
+
+            result = []
+            for doc_id, title in documents:
+                cursor.execute("SELECT text FROM chunks WHERE document_id = ? ORDER BY chunk_id", (doc_id,))
+                chunks = cursor.fetchall()
+                document_text = "\n\n".join(chunk[0] for chunk in chunks)
+                result.append(f"Title: {title}\n\n{document_text}")
+
+            return "\n\n".join(result)
+    
+
+    def list_documents(self):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                SELECT d.title, d.path, COUNT(c.id) as num_chunks
+                FROM documents d
+                LEFT JOIN chunks c ON d.id = c.document_id
+                GROUP BY d.id
+            ''')
+            documents = cursor.fetchall()
+
+            result = []
+            for title, path, num_chunks in documents:
+                result.append({
+                    'title': title,
+                    'path': path,
+                    'num_chunks': num_chunks
+                })
+
+            return result
 
     def remove_document(self, doc_hash: str):
         """
