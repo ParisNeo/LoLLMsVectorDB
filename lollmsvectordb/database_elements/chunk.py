@@ -18,7 +18,7 @@ class Chunk:
         The number of tokens in the chunk.
     """
 
-    def __init__(self, doc: Document, vector: bytes, text: str, nb_tokens: int, id: Optional[int] = None, distance:float = 0):
+    def __init__(self, doc: Document, vector: bytes, text: str, nb_tokens: int, id: Optional[int] = None, distance:float = 0, chunk_id:int = 0):
         """
         Constructs all the necessary attributes for the Chunk object.
 
@@ -38,6 +38,7 @@ class Chunk:
             The distance between the chunk and the query when searched. Default is None.
         """
         self.id = id
+        self.chunk_id = chunk_id
         self.doc = doc
         self.vector = vector
         self.text = text
@@ -54,4 +55,4 @@ class Chunk:
         str
             A string representation of the Chunk object.
         """
-        return f"Chunk(id={self.id}, document_id={self.document_id}, vector={self.vector}, text={self.text}, nb_tokens={self.nb_tokens})"
+        return f"Chunk(id={self.id}, document_id={self.document_id}, vector={self.vector}, text={self.text}, nb_tokens={self.nb_tokens}, chunk_id={self.chunk_id})"

@@ -26,8 +26,9 @@ from lollmsvectordb.database_elements.document import Document
 from lollmsvectordb.database_elements.chunk import Chunk
 
 from lollmsvectordb.text_chunker import TextChunker
+from lollmsvectordb.llm_model import LLMModel
 
-__version__ = 2
+__version__ = 3
 
 def replace_nan_with_zero(arrays: List[np.ndarray]) -> List[int]:
     """
@@ -81,7 +82,7 @@ class VectorDatabase:
         List of text corresponding to the vectors.
     """
 
-    def __init__(self, db_path: str, vectorizer: Vectorizer, tokenizer: Tokenizer, chunk_size: int = 512, clean_chunks=True, n_neighbors: int = 5, algorithm: str = 'auto', metrics:str="euclidean", reset=False):
+    def __init__(self, db_path: str, vectorizer: Vectorizer, tokenizer: Tokenizer, chunk_size: int = 512, overlap: int = 0, clean_chunks=True, n_neighbors: int = 5, algorithm: str = 'auto', metrics:str="euclidean", reset=False, model: Optional[LLMModel] = None):
         """
         Initializes the VectorDatabase with the given parameters.
 
@@ -130,7 +131,7 @@ class VectorDatabase:
         self.metrics    = metrics
         self.clean_chunks = clean_chunks
         self.nn_model = None
-        self.textChunker = TextChunker(chunk_size=chunk_size)
+        self.textChunker = TextChunker(chunk_size=chunk_size, overlap=overlap, model=model)
         self.documents:List[Document]=[]
         self.chunks:List[Chunk]=[]
         self.nn_fitted = False
@@ -191,6 +192,7 @@ class VectorDatabase:
                     vector BLOB,
                     text TEXT NOT NULL,
                     nb_tokens INT NOT NULL,
+                    chunk_id INT, 
                     FOREIGN KEY(document_id) REFERENCES documents(id)
                 )
             ''')
@@ -309,7 +311,10 @@ class VectorDatabase:
                 ''', (doc_hash, title, str(path)))
                 document_id = cursor.lastrowid
 
-                ASCIIColors.multicolor(["lollmsVectorDB>","Chunking file:",f"{title}"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
+                ASCIIColors.multicolor(["lollmsVectorDB> ","Chunking file:",f"{title}"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
+                if self.textChunker.model:
+                    ASCIIColors.multicolor(["lollmsVectorDB> ","Preprocessing chunks is active"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
+
                 chunks:List[Chunk]= self.textChunker.get_text_chunks(text, doc, min_nb_tokens_in_chunk=min_nb_tokens_in_chunk)
 
                 for chunk in tqdm(chunks):
@@ -317,8 +322,8 @@ class VectorDatabase:
                         vector = self.vectorizer.vectorize([chunk.text])[0]
                         vector_blob = np.array(vector).tobytes()
                         cursor.execute('''
-                            INSERT INTO chunks (document_id, vector, text, nb_tokens) VALUES (?, ?, ?, ?)
-                        ''', (document_id, vector_blob, chunk.text, chunk.nb_tokens))
+                            INSERT INTO chunks (document_id, vector, text, nb_tokens, chunk_id) VALUES (?, ?, ?, ?, ?)
+                        ''', (document_id, vector_blob, chunk.text, chunk.nb_tokens, chunk.chunk_id))
                     else:
                         cursor.execute('''
                             INSERT INTO chunks (document_id, text, nb_tokens) VALUES (?, ?, ?)
@@ -605,7 +610,7 @@ class VectorDatabase:
                 return document
         return None
 
-    def search(self, query_data: str, n_results: int = 5) -> List[Chunk]:
+    def search(self, query_data: str, n_results: int = 5, exclude_chunk_ids: List[int] = []) -> List[Chunk]:
         """
         Searches for the nearest neighbors of the query data.
 
@@ -615,6 +620,8 @@ class VectorDatabase:
             The data to be vectorized and searched in the database.
         n_results : int, optional
             Number of nearest neighbors to return (default is 5).
+        exclude_chunk_ids : List[int], optional
+            List of chunk IDs to exclude from the search results (default is empty list).
 
         Returns:
         --------
@@ -624,34 +631,35 @@ class VectorDatabase:
         if self.nn_model is None:
             raise ValueError("Index not built. Call build_index() before searching.")
         
-        results:List[Chunk] = []
+        results: List[Chunk] = []
         if len(self.vectors) < n_results:
-            n_results=len(self.vectors)
+            n_results = len(self.vectors)
         
         query_vector = self.vectorizer.vectorize([query_data])[0]
         distances, indices = self.nn_model.kneighbors([query_vector], n_neighbors=n_results)
-        if self.db_path!="":
+        if self.db_path != "":
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                for index, distance in zip(indices[0,:], distances[0,:]):
+                for index, distance in zip(indices[0, :], distances[0, :]):
                     # SQL query to join documents and chunks tables and retrieve the required details
                     query = '''
-                        SELECT d.title, d.path, d.hash, c.text, c.nb_tokens
+                        SELECT d.title, d.path, d.hash, c.text, c.nb_tokens, c.chunk_id
                         FROM chunks c
                         JOIN documents d ON c.document_id = d.id
-                        WHERE c.vector = ?
-                    '''
+                        WHERE c.vector = ? AND c.chunk_id NOT IN ({})
+                    '''.format(','.join('?' for _ in exclude_chunk_ids))
 
-                    # Execute the query with the provided vector
-                    cursor.execute(query, (self.vectors[index],))
+                    # Execute the query with the provided vector and exclude_chunk_ids
+                    cursor.execute(query, (self.vectors[index], *exclude_chunk_ids))
                     result = cursor.fetchone()
-                    doc = self.find_document_by_path(result[1])
-                    if not doc:
-                        doc = Document(result[2],result[0], result[1], len(self.documents))
-                    chunk = Chunk(doc, self.vectors[index], result[3], result[4], distance=distance)
-                    results.append(chunk)
+                    if result:
+                        doc = self.find_document_by_path(result[1])
+                        if not doc:
+                            doc = Document(result[2], result[0], result[1], len(self.documents))
+                        chunk = Chunk(doc, self.vectors[index], result[3], result[4], distance=distance, chunk_id=result[5])
+                        results.append(chunk)
         else:
-            results = [c for c in self.chunks if c.vector in self.vectors[indices]]
+            results = [c for c in self.chunks if c.vector in self.vectors[indices] and c.chunk_id not in exclude_chunk_ids]
 
         return results
 
