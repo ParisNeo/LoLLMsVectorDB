@@ -157,7 +157,9 @@ class VectorDatabase:
         ASCIIColors.multicolor(["lollmsVectorDB>","Search model status:",f"{self.nn_model}"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
         ASCIIColors.multicolor(["lollmsVectorDB>","lollmsVectorDB ",f"is ready"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
         self.new_data=False
-
+        
+    def __del__(self):
+        print("deleted Vector database")
 
     def _create_tables(self, reset: bool = False):
         """

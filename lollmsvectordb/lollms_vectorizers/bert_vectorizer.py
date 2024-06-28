@@ -17,6 +17,8 @@ from typing import List
 import json
 
 class BERTVectorizer(Vectorizer):
+    _model_cache = {}
+    _model_ref_count = {}
     def __init__(self, model_name: str = 'bert-base-nli-mean-tokens'):
         """
         Initializes the BERTVectorizer with a specified BERT model.
@@ -29,14 +31,37 @@ class BERTVectorizer(Vectorizer):
         # self.tokenizer = BertTokenizer.from_pretrained(model_name)
         ASCIIColors.success("OK")
         ASCIIColors.multicolor(["LollmsVectorDB>",f"Loading Pretrained Bert model {model_name} ..."],[ASCIIColors.color_red, ASCIIColors.color_cyan], end="", flush=True)
-        self.model_ =  SentenceTransformer('bert-base-nli-mean-tokens')
+
+        if model_name in BERTVectorizer._model_cache:
+            self.model_ = BERTVectorizer._model_cache[model_name]
+            BERTVectorizer._model_ref_count[model_name] += 1
+            ASCIIColors.success(f"Loaded {model_name} from cache")
+        else:
+            ASCIIColors.multicolor(["LollmsVectorDB>", f"Loading Pretrained Bert model {model_name} ..."], [ASCIIColors.color_red, ASCIIColors.color_cyan], end="", flush=True)
+            self.model_ = SentenceTransformer(model_name)
+            BERTVectorizer._model_cache[model_name] = self.model_
+            BERTVectorizer._model_ref_count[model_name] = 1
+            ASCIIColors.success("OK")
+
         ASCIIColors.success("OK")
         self.parameters = {
             "model_name": model_name
         }
+
         ASCIIColors.multicolor(["LollmsVectorDB>",f" Parameters:"],[ASCIIColors.color_red, ASCIIColors.color_bright_green])
         ASCIIColors.yellow(json.dumps(self.parameters, indent=4))
         self.fitted = True
+
+    def __del__(self):
+        """
+        Destructor to manage the lifecycle of the model.
+        """
+        if self.parameters["model_name"] in BERTVectorizer._model_ref_count:
+            BERTVectorizer._model_ref_count[self.parameters["model_name"]] -= 1
+            if BERTVectorizer._model_ref_count[self.parameters["model_name"]] == 0:
+                del BERTVectorizer._model_cache[self.parameters["model_name"]]
+                del BERTVectorizer._model_ref_count[self.parameters["model_name"]]
+                ASCIIColors.success(f"Released model {self.parameters['model_name']} from cache")
 
     def fit(self, data: List[str]):
         """
