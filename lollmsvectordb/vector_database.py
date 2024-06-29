@@ -179,14 +179,20 @@ class VectorDatabase:
                 cursor.execute('DROP TABLE IF EXISTS kneighbors_model')
                 cursor.execute('DROP TABLE IF EXISTS database_info')
 
+            # Create the documents table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS documents (
                     id INTEGER PRIMARY KEY,
                     hash TEXT UNIQUE NOT NULL,
                     title TEXT NOT NULL,
-                    path TEXT NOT NULL -- Because every document needs a home, right?
+                    path TEXT NOT NULL,
+                    category_id INTEGER DEFAULT 1,
+                    subcategory_id INTEGER DEFAULT 1,
+                    FOREIGN KEY(category_id) REFERENCES categories(id),
+                    FOREIGN KEY(subcategory_id) REFERENCES subcategories(id)
                 )
             ''')
+            # Create the chunks table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS chunks (
                     id INTEGER PRIMARY KEY,
@@ -198,6 +204,37 @@ class VectorDatabase:
                     FOREIGN KEY(document_id) REFERENCES documents(id)
                 )
             ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS nodes (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    type TEXT,
+                    UNIQUE(name, type)
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS relations (
+                    id INTEGER PRIMARY KEY,
+                    source_node_id INTEGER,
+                    target_node_id INTEGER,
+                    relation_type TEXT,
+                    FOREIGN KEY(source_node_id) REFERENCES nodes(id),
+                    FOREIGN KEY(target_node_id) REFERENCES nodes(id)
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS chunk_nodes (
+                    chunk_id INTEGER,
+                    node_id INTEGER,
+                    PRIMARY KEY(chunk_id, node_id),
+                    FOREIGN KEY(chunk_id) REFERENCES chunks(id),
+                    FOREIGN KEY(node_id) REFERENCES nodes(id)
+                )
+            ''')
+            # Create the vectorizer_info table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS vectorizer_info (
                     id INTEGER PRIMARY KEY,
@@ -206,17 +243,48 @@ class VectorDatabase:
                     model BLOB
                 )
             ''')
+
+            # Create the kneighbors_model table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS kneighbors_model (
                     id INTEGER PRIMARY KEY,
                     model BLOB NOT NULL
                 )
             ''')
+
+            # Create the database_info table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS database_info (
                     id INTEGER PRIMARY KEY,
                     version INT NOT NULL
                 )
+            ''')
+
+            # Create the categories table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS categories (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE
+                )
+            ''')
+
+            # Create the subcategories table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS subcategories (
+                    id INTEGER PRIMARY KEY,
+                    category_id INTEGER,
+                    name TEXT NOT NULL,
+                    FOREIGN KEY(category_id) REFERENCES categories(id)
+                )
+            ''')
+
+            # Insert default category and subcategory
+            cursor.execute('''
+                INSERT OR IGNORE INTO categories (id, name) VALUES (1, 'General')
+            ''')
+
+            cursor.execute('''
+                INSERT OR IGNORE INTO subcategories (id, category_id, name) VALUES (1, 1, 'General')
             ''')
             # Check if there is an entry in the database_info table
             cursor.execute('SELECT COUNT(*) FROM database_info')
@@ -269,10 +337,111 @@ class VectorDatabase:
                         return result[0]
         return None
 
+    def create_category(self, category_name):
+        """
+        Creates a new category in the categories table.
+        
+        Args:
+        cursor (sqlite3.Cursor): The database cursor.
+        category_name (str): The name of the category to be created.
+        
+        Returns:
+        int: The ID of the newly created category.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO categories (name) VALUES (?)
+            ''', (category_name,))
+        return cursor.lastrowid
+
+    def create_subcategory(self, category_id, subcategory_name):
+        """
+        Creates a new subcategory in the subcategories table.
+        
+        Args:
+        cursor (sqlite3.Cursor): The database cursor.
+        category_id (int): The ID of the category to which the subcategory belongs.
+        subcategory_name (str): The name of the subcategory to be created.
+        
+        Returns:
+        int: The ID of the newly created subcategory.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO subcategories (category_id, name) VALUES (?, ?)
+            ''', (category_id, subcategory_name))
+        return cursor.lastrowid
+
+    def create_node(self, name, node_type, chunk_id=None):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            # Insert the node into the nodes table
+            cursor.execute('''
+                INSERT OR IGNORE INTO nodes (name, type) VALUES (?, ?)
+            ''', (name, node_type))
+            
+            # Retrieve the node_id of the newly inserted or existing node
+            cursor.execute('''
+                SELECT id FROM nodes WHERE name = ? AND type = ?
+            ''', (name, node_type))
+            node_id = cursor.fetchone()[0]
+            
+            # If a chunk_id is provided, link the node to the chunk
+            if chunk_id is not None:
+                cursor.execute('''
+                    INSERT OR IGNORE INTO chunk_nodes (chunk_id, node_id) VALUES (?, ?)
+                ''', (chunk_id, node_id))
+        
+        return node_id
 
 
+    def add_relation(self, source_node_id, target_node_id, relation_type):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()        
+            # Insert the relation into the relations table
+            cursor.execute('''
+                INSERT INTO relations (source_node_id, target_node_id, relation_type) VALUES (?, ?, ?)
+            ''', (source_node_id, target_node_id, relation_type))
 
-    def add_document(self, title: str, text: str, path: Union[str, Path]="unknown", force_update=False, min_nb_tokens_in_chunk=10):
+    def get_linked_nodes(self, node_name):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            # Retrieve the node_id of the given node name
+            cursor.execute('''
+                SELECT id FROM nodes WHERE name = ?
+            ''', (node_name,))
+            node_id = cursor.fetchone()
+            
+            if node_id is None:
+                return "Node not found", {}
+            
+            node_id = node_id[0]
+            
+            # Retrieve the linked nodes and their relations
+            cursor.execute('''
+                SELECT n2.name, r.relation_type
+                FROM nodes n1
+                JOIN relations r ON n1.id = r.source_node_id
+                JOIN nodes n2 ON r.target_node_id = n2.id
+                WHERE n1.id = ?
+            ''', (node_id,))
+            
+            linked_nodes = cursor.fetchall()
+            
+            # Format the results as text
+            text_result = f"Nodes linked to '{node_name}':\n"
+            dict_result = {"node_name": node_name, "linked_nodes": []}
+            
+            for node, relation in linked_nodes:
+                text_result += f"- {node} (Relation: {relation})\n"
+                dict_result["linked_nodes"].append({"node": node, "relation": relation})
+            
+        return text_result, dict_result
+     
+    def add_document(self, title: str, text: str, path: Union[str, Path]="unknown", force_update=False, min_nb_tokens_in_chunk=10, category_id=None, subcategory_id=None):
         """
         Adds a document and its chunks to the database.
 
@@ -286,7 +455,13 @@ class VectorDatabase:
             The path to the document.
         chunk_size : int, optional
             The size of each chunk (default is 512).
+
         """
+        if category_id is None:
+            category_id = 1  # Default category ID
+        if subcategory_id is None:
+            subcategory_id = 1  # Default subcategory ID
+            
         doc_hash = self._hash_document(text)
         if self.db_path!="":
             with sqlite3.connect(self.db_path) as conn:
@@ -309,8 +484,8 @@ class VectorDatabase:
                 doc = Document(doc_hash, title, path, len(self.documents))
                 self.documents.append(doc)
                 cursor.execute('''
-                    INSERT INTO documents (hash, title, path) VALUES (?, ?, ?)
-                ''', (doc_hash, title, str(path)))
+                    INSERT INTO documents (hash, title, path, category_id, subcategory_id) VALUES (?, ?, ?, ?, ?)
+                ''', (doc_hash, title, str(path), category_id, subcategory_id))
                 document_id = cursor.lastrowid
 
                 ASCIIColors.multicolor(["lollmsVectorDB> ","Chunking file:",f"{title}"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
@@ -616,32 +791,33 @@ class VectorDatabase:
         self.load_vectorizer_model()
         if self.vectorizer.fitted:
             ASCIIColors.multicolor(["LollmsVectorDB> ", "Vectorizer is ready"], [ASCIIColors.color_red, ASCIIColors.color_green])
-
-        if self.vectorizer.requires_fitting and self.vectorizer.model is None:
-            if self.db_path!="":
-                ASCIIColors.multicolor(["LollmsVectorDB> ", "Fitting vectorizer"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
-                with sqlite3.connect(self.db_path) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        SELECT text FROM chunks
-                    ''')
-                    chunks = cursor.fetchall()
-                    if len(chunks)==0:
-                        return 
-                    ASCIIColors.multicolor(["LollmsVectorDB> ", "Training vectorizer"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
-                    try:
-                        self.vectorizer.fit([c[0] for c in chunks])
-                    except:
-                        self.vectorizer.model = None
+            self._load_vectors()
+        else:
+            if self.vectorizer.requires_fitting and self.vectorizer.model is None:
+                if self.db_path!="":
+                    ASCIIColors.multicolor(["LollmsVectorDB> ", "Fitting vectorizer"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
+                    with sqlite3.connect(self.db_path) as conn:
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            SELECT text FROM chunks
+                        ''')
+                        chunks = cursor.fetchall()
+                        if len(chunks)==0:
+                            return 
+                        ASCIIColors.multicolor(["LollmsVectorDB> ", "Training vectorizer"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
+                        try:
+                            self.vectorizer.fit([c[0] for c in chunks])
+                        except:
+                            self.vectorizer.model = None
+                        self.store_vectorizer_model()
+                        self._update_vectors(revectorize)
+                else:
+                    self.vectorizer.fit([c.text for c in self.chunks])
                     self.store_vectorizer_model()
                     self._update_vectors(revectorize)
             else:
-                self.vectorizer.fit([c.text for c in self.chunks])
-                self.store_vectorizer_model()
-                self._update_vectors(revectorize)
-        else:
-            self._load_vectors()
-        
+                self._load_vectors()
+        self.load_first_kneighbors_model()
         if len(self.vectors)>0 and not self.nn_model:
             self.nn_model = NearestNeighbors(n_neighbors=self.n_neighbors, algorithm=self.algorithm, metric='cosine')
             self.nn_model.fit(self.vectors)
