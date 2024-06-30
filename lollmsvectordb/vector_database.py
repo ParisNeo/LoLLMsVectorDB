@@ -192,6 +192,16 @@ class VectorDatabase:
                     FOREIGN KEY(subcategory_id) REFERENCES subcategories(id)
                 )
             ''')
+            # Create the document_summaries table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS document_summaries (
+                    id INTEGER PRIMARY KEY,
+                    document_id INTEGER NOT NULL,
+                    context TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    FOREIGN KEY(document_id) REFERENCES documents(id)
+                )
+            ''')
             # Create the chunks table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS chunks (
@@ -635,11 +645,12 @@ class VectorDatabase:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    SELECT chunks.vector
+                    SELECT chunks.vector, chunks.chunk_id
                     FROM chunks 
                 ''')
                 rows = cursor.fetchall()
                 self.vectors = [np.frombuffer(row[0], dtype=np.float32) for row in rows]
+                self.chunk_ids = [row[1] for row in rows]
         else:
             ASCIIColors.error("Can't load vectors from database if you don't specify a file path")
 
@@ -647,8 +658,9 @@ class VectorDatabase:
         """
         Updates vectors in the database using the current vectorizer.
         """
+        self.vectors = []
+        self.chunk_ids = []
         if self.db_path!="":
-            self.vectors = []
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute('SELECT id, text, vector FROM chunks')
@@ -659,19 +671,20 @@ class VectorDatabase:
                     if vector is None or revectorize:
                         vector = np.array(self.vectorizer.vectorize([text])[0])
                         self.vectors.append(vector)
+                        self.chunk_ids.append(chunk.chunk_id)
                         vector_blob = vector.tobytes()
                         cursor.execute('UPDATE chunks SET vector = ? WHERE id = ?', (vector_blob, chunk_id))
                     else:
                         self.vectors.append(np.frombuffer(vector, dtype=np.float32))
                 conn.commit()
         else:
-            self.vectors = []
             try:
                 ASCIIColors.multicolor(["LollmsVectorDB> ", f"Vectorizing {len(self.chunks)} chunks"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
                 for chunk in tqdm(self.chunks):
                     vector = self.vectorizer.vectorize([chunk.text])[0]
                     chunk.vector = vector
                     self.vectors.append(vector)
+                    self.chunk_ids.append(chunk.chunk_id)
             except Exception as ex:
                 trace_exception(ex)
                 ASCIIColors.error("Document Not found!")
@@ -817,12 +830,6 @@ class VectorDatabase:
                     self._update_vectors(revectorize)
             else:
                 self._load_vectors()
-        self.load_first_kneighbors_model()
-        if len(self.vectors)>0 and not self.nn_model:
-            self.nn_model = NearestNeighbors(n_neighbors=self.n_neighbors, algorithm=self.algorithm, metric='cosine')
-            self.nn_model.fit(self.vectors)
-            self.nn_fitted = True
-            self.store_kneighbors_model()
         
 
     def find_document_by_path(self, target_path: str) -> Optional[Document]:
@@ -860,13 +867,33 @@ class VectorDatabase:
         list of tuples
             A list of tuples containing the vector, text, title, path, and distance of the nearest neighbors.
         """
-        if self.nn_model is None:
-            raise ValueError("Index not built. Call build_index() before searching.")
-        
         results: List[Chunk] = []
-        if len(self.vectors) < n_results:
-            n_results = len(self.vectors)
+
+        if len(exclude_chunk_ids)==0:
+            # New lists to store the filtered results
+            filtered_vectors = self.vectors
+            filtered_chunk_ids = self.chunk_ids
+        else:
+            # New lists to store the filtered results
+            filtered_vectors = []
+            filtered_chunk_ids = []
+
+            # Iterate through the existing lists
+            for i in range(len(self.chunk_ids)):
+                if i not in exclude_chunk_ids:
+                    filtered_vectors.append(self.vectors[i])
+                    filtered_chunk_ids.append(self.chunk_ids[i])
+
+        if len(filtered_vectors) < n_results:
+            n_results = len(filtered_vectors)
+
+        if len(filtered_vectors)==0:
+            return []
         
+
+        self.nn_model = NearestNeighbors(n_neighbors=self.n_neighbors, algorithm=self.algorithm, metric='cosine')
+        self.nn_model.fit(filtered_vectors)
+
         query_vector = self.vectorizer.vectorize([query_data])[0]
         distances, indices = self.nn_model.kneighbors([query_vector], n_neighbors=n_results)
         if self.db_path != "":
@@ -878,11 +905,11 @@ class VectorDatabase:
                         SELECT d.title, d.path, d.hash, c.text, c.nb_tokens, c.chunk_id
                         FROM chunks c
                         JOIN documents d ON c.document_id = d.id
-                        WHERE c.vector = ? AND c.chunk_id NOT IN ({})
-                    '''.format(','.join('?' for _ in exclude_chunk_ids))
+                        WHERE c.vector = ?
+                    '''
 
                     # Execute the query with the provided vector and exclude_chunk_ids
-                    cursor.execute(query, (self.vectors[index], *exclude_chunk_ids))
+                    cursor.execute(query, (self.vectors[index],))
                     result = cursor.fetchone()
                     if result:
                         doc = self.find_document_by_path(result[1])
@@ -912,6 +939,59 @@ class VectorDatabase:
             ''', (f"{meta_prefix}%",))
             conn.commit()
 
+
+
+    def get_document_id(self, name_or_path):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id FROM documents WHERE title = ? OR path = ?
+            ''', (name_or_path, name_or_path))
+            result = cursor.fetchone()
+            return result[0] if result else None
+
+    def get_contextual_summaries(self, name_or_path):
+        document_id = self.get_document_id(name_or_path)
+        if document_id is None:
+            return []
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT context, summary FROM document_summaries WHERE document_id = ?
+            ''', (document_id,))
+            rows = cursor.fetchall()
+
+        summaries = [{'context': row[0], 'summary': row[1]} for row in rows]
+        return summaries
+
+    def remove_summaries(self, name_or_path):
+        document_id = self.get_document_id(name_or_path)
+        if document_id is None:
+            return False
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                DELETE FROM document_summaries WHERE document_id = ?
+            ''', (document_id,))
+            conn.commit()
+        return True
+
+    def add_summaries(self, name_or_path, summaries):
+        document_id = self.get_document_id(name_or_path)
+        if document_id is None:
+            return False
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            for summary in summaries:
+                cursor.execute('''
+                    INSERT INTO document_summaries (document_id, context, summary)
+                    VALUES (?, ?, ?)
+                ''', (document_id, summary['context'], summary['summary']))
+            conn.commit()
+        return True
 
 # Example usage
 if __name__ == "__main__":
