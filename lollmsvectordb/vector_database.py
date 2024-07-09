@@ -134,6 +134,9 @@ class VectorDatabase:
         self.textChunker = TextChunker(chunk_size=chunk_size, overlap=overlap, model=model)
         self.documents:List[Document]=[]
         self.chunks:List[Chunk]=[]
+        self.vectors:List[bytes] = []
+        self.chunk_ids:List[int] = []
+
         self.nn_fitted = False
 
         if db_path!="":
@@ -152,7 +155,7 @@ class VectorDatabase:
                     self.nn_model.fit(self.vectors)
                     self.nn_fitted = True
                     self.store_kneighbors_model()
-        self.build_index(False)
+            self.build_index(False)
         ASCIIColors.multicolor(["lollmsVectorDB>","Vectorizer status:",f"{self.vectorizer}"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
         ASCIIColors.multicolor(["lollmsVectorDB>","Search model status:",f"{self.nn_model}"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
         ASCIIColors.multicolor(["lollmsVectorDB>","lollmsVectorDB ",f"is ready"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
@@ -518,11 +521,17 @@ class VectorDatabase:
                 conn.commit()
                 self.new_data=True
         else:
-            chunks = self.textChunker.get_text_chunks(text, doc, self.clean_chunks)
             doc = Document(doc_hash, title, path, len(self.documents))
+            chunks = self.textChunker.get_text_chunks(text, doc, self.clean_chunks)
+            for chunk in chunks:
+                chunk.chunk_id = len(self.chunks)
+                self.chunks.append(chunk)
+                
             self.documents.append(doc)
             for chunk in chunks:
                 chunk.vector = self.vectorizer.vectorize([chunk.text])[0]
+                self.vectors.append(chunk.vector)
+                self.chunk_ids.append(chunk.id)
 
     def get_document(self, document_title=None, document_path=None):
         with sqlite3.connect(self.db_path) as conn:
@@ -804,7 +813,8 @@ class VectorDatabase:
         self.load_vectorizer_model()
         if self.vectorizer.fitted:
             ASCIIColors.multicolor(["LollmsVectorDB> ", "Vectorizer is ready"], [ASCIIColors.color_red, ASCIIColors.color_green])
-            self._load_vectors()
+            if self.db_path!="":
+                self._load_vectors()
         else:
             if self.vectorizer.requires_fitting and self.vectorizer.model is None:
                 if self.db_path!="":
@@ -918,7 +928,7 @@ class VectorDatabase:
                         chunk = Chunk(doc, self.vectors[index], result[3], result[4], distance=distance, chunk_id=result[5])
                         results.append(chunk)
         else:
-            results = [c for c in self.chunks if c.vector in self.vectors[indices] and c.chunk_id not in exclude_chunk_ids]
+            results = [c for c in self.chunks if c.chunk_id in indices and c.chunk_id not in exclude_chunk_ids]
 
         return results
 

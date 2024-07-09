@@ -37,7 +37,6 @@ class BERTVectorizer(Vectorizer):
             BERTVectorizer._model_ref_count[model_name] += 1
             ASCIIColors.success(f"Loaded {model_name} from cache")
         else:
-            ASCIIColors.multicolor(["LollmsVectorDB>", f"Loading Pretrained Bert model {model_name} ..."], [ASCIIColors.color_red, ASCIIColors.color_cyan], end="", flush=True)
             self.model_ = SentenceTransformer(model_name)
             BERTVectorizer._model_cache[model_name] = self.model_
             BERTVectorizer._model_ref_count[model_name] = 1
