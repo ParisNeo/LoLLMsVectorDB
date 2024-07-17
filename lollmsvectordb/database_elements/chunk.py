@@ -55,4 +55,4 @@ class Chunk:
         str
             A string representation of the Chunk object.
         """
-        return f"Chunk(id={self.id}, document_id={self.document_id}, vector={self.vector}, text={self.text}, nb_tokens={self.nb_tokens}, chunk_id={self.chunk_id})"
+        return f"Chunk(id={self.id}, document_id={self.doc.id}, vector={self.vector}, text={self.text}, nb_tokens={self.nb_tokens}, chunk_id={self.chunk_id})"
