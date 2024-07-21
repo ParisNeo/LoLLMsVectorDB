@@ -9,7 +9,7 @@ This file is part of the LoLLMsVectorDB project, a modular text-based database m
 """
 
 from sentence_transformers import SentenceTransformer
-import torch
+
 import numpy as np
 from lollmsvectordb.vectorizer import Vectorizer
 from ascii_colors import ASCIIColors

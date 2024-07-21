@@ -4,3 +4,4 @@ gensim
 tiktoken
 ascii_colors
 tqdm
+sentence_transformers
