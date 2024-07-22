@@ -7,8 +7,12 @@ Description: Contains the BERTVectorizer class for vectorizing text data using B
 
 This file is part of the LoLLMsVectorDB project, a modular text-based database manager for retrieval-augmented generation (RAG), seamlessly integrating with the LoLLMs ecosystem.
 """
-
-from sentence_transformers import SentenceTransformer
+try:
+    from sentence_transformers import SentenceTransformer
+except:
+    import pipmaster as pm
+    pm.install("sentence-transformers",force_reinstall=True)
+    from sentence_transformers import SentenceTransformer
 
 import numpy as np
 from lollmsvectordb.vectorizer import Vectorizer
