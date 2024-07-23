@@ -7,15 +7,22 @@ Description: Contains the BERTVectorizer class for vectorizing text data using B
 
 This file is part of the LoLLMsVectorDB project, a modular text-based database manager for retrieval-augmented generation (RAG), seamlessly integrating with the LoLLMs ecosystem.
 """
-from ascii_colors import ASCIIColors
+from ascii_colors import ASCIIColors, trace_exception
 try:
     from sentence_transformers import SentenceTransformer
 except Exception as ex:
+    trace_exception(ex)
     ASCIIColors.red("sentence-transformers has a problem. Reinstalling it")
     import pipmaster as pm
-    pm.install("sentence-transformers",force_reinstall=True)
-    from sentence_transformers import SentenceTransformer
-
+    pm.install("sentence-transformers", force_reinstall=True, upgrade=True)
+    try:
+        from sentence_transformers import SentenceTransformer
+    except Exception as ex:
+        trace_exception(ex)
+        ASCIIColors.error("Warning! SentenceTransformer is broken. Try to manually reinstall pytorch and then reinstall SentenceTransformer")
+        class SentenceTransformer:
+            def __init__(self, model_name="") -> None:
+                self.model = model_name
 import numpy as np
 from lollmsvectordb.vectorizer import Vectorizer
 from typing import List
@@ -60,13 +67,15 @@ class BERTVectorizer(Vectorizer):
         """
         Destructor to manage the lifecycle of the model.
         """
-        if self.parameters["model_name"] in BERTVectorizer._model_ref_count:
-            BERTVectorizer._model_ref_count[self.parameters["model_name"]] -= 1
-            if BERTVectorizer._model_ref_count[self.parameters["model_name"]] == 0:
-                del BERTVectorizer._model_cache[self.parameters["model_name"]]
-                del BERTVectorizer._model_ref_count[self.parameters["model_name"]]
-                ASCIIColors.success(f"Released model {self.parameters['model_name']} from cache")
-
+        try:
+            if self.parameters["model_name"] in BERTVectorizer._model_ref_count:
+                BERTVectorizer._model_ref_count[self.parameters["model_name"]] -= 1
+                if BERTVectorizer._model_ref_count[self.parameters["model_name"]] == 0:
+                    del BERTVectorizer._model_cache[self.parameters["model_name"]]
+                    del BERTVectorizer._model_ref_count[self.parameters["model_name"]]
+                    ASCIIColors.success(f"Released model {self.parameters['model_name']} from cache")
+        except Exception as ex:
+            trace_exception(ex)
     def fit(self, data: List[str]):
         """
         BERT does not require fitting as it is a pre-trained model.
