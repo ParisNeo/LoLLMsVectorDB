@@ -7,16 +7,17 @@ Description: Contains the BERTVectorizer class for vectorizing text data using B
 
 This file is part of the LoLLMsVectorDB project, a modular text-based database manager for retrieval-augmented generation (RAG), seamlessly integrating with the LoLLMs ecosystem.
 """
+from ascii_colors import ASCIIColors
 try:
     from sentence_transformers import SentenceTransformer
-except:
+except Exception as ex:
+    ASCIIColors.red("sentence-transformers has a problem. Reinstalling it")
     import pipmaster as pm
     pm.install("sentence-transformers",force_reinstall=True)
     from sentence_transformers import SentenceTransformer
 
 import numpy as np
 from lollmsvectordb.vectorizer import Vectorizer
-from ascii_colors import ASCIIColors
 from typing import List
 import json
 
