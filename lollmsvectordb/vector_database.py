@@ -612,6 +612,22 @@ class VectorDatabase:
                 })
 
             return result
+        
+    def get_all_chunks(self)->List[Chunk]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT id, title, path, hash FROM documents")
+            documents = cursor.fetchall()
+
+            chunks = []
+            for doc_id, title, path, hash in documents:
+                doc = Document(hash, title, path, doc_id)
+                cursor.execute("SELECT chunk_id, text, vector, nb_tokens  FROM chunks WHERE document_id = ? ORDER BY chunk_id", (doc_id,))
+                chunks = cursor.fetchall()
+                chunks.append([Chunk(doc, vector, text, nb_tokens, chunk_id=chunk_id) for chunk_id, text, vector, nb_tokens in chunks])
+
+            return chunks
 
     def get_all_documents(self):
         with sqlite3.connect(self.db_path) as conn:
