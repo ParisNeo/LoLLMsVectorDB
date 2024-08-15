@@ -533,6 +533,31 @@ class VectorDatabase:
                 self.vectors.append(chunk.vector)
                 self.chunk_ids.append(chunk.id)
 
+    def get_document_hash(self, document_title=None, document_path=None):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            if document_title is None and document_path is None:
+                raise ValueError("Either document_title or document_path must be provided")
+
+            query = "SELECT id, hash FROM documents WHERE "
+            params = []
+
+            if document_title:
+                query += "title = ?"
+                params.append(document_title)
+            elif document_path:
+                query += "path = ?"
+                params.append(document_path)
+
+            cursor.execute(query, params)
+            documents = cursor.fetchall()
+
+            if not documents:
+                return None
+            return documents[0][1]
+
+
     def get_document(self, document_title=None, document_path=None):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
@@ -585,6 +610,22 @@ class VectorDatabase:
                     'path': path,
                     'num_chunks': num_chunks
                 })
+
+            return result
+
+    def get_all_documents(self):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT id, title FROM documents")
+            documents = cursor.fetchall()
+
+            result = []
+            for doc_id, title in documents:
+                cursor.execute("SELECT text FROM chunks WHERE document_id = ? ORDER BY chunk_id", (doc_id,))
+                chunks = cursor.fetchall()
+                document_text = "\n\n".join(chunk[0] for chunk in chunks)
+                result.append(f"Title: {title}\n\n{document_text}")
 
             return result
 

@@ -5,3 +5,4 @@ tiktoken
 ascii_colors
 tqdm
 sentence_transformers
+PyPDF2
