@@ -4,3 +4,4 @@ tiktoken
 ascii_colors
 tqdm
 transformers
+PyPDF2

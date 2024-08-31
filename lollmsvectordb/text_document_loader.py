@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import List
-
+import re
 
 class PackageManager:
     @staticmethod
@@ -40,7 +40,7 @@ class TextDocumentsLoader:
             return TextDocumentsLoader.read_pptx_file(file_path)
         elif file_path.suffix.lower() in [".pcap"]:
             return TextDocumentsLoader.read_pcap_file(file_path)
-        elif file_path.suffix.lower() in ['.sh', '.json', '.sym', '.log', '.snippet', '.se', '.yml', '.snippets', '.lua', '.pdf', '.md', '.docx', '.yaml', '.inc', '.txt', '.ini', '.pas', '.pptx', '.map', '.php', '.xlsx', '.rtf', '.hpp', '.h', '.asm', '.xml', '.hh', '.sql', '.java', '.c', '.html', '.inf', '.rb', '.py', '.cs', '.js', '.bat', '.css', '.s', '.cpp', '.csv']:
+        elif file_path.suffix.lower() in ['.sh', '.json', '.sym', '.log', '.snippet', '.se', '.yml', '.snippets', '.lua', '.pdf', '.md', '.docx', '.yaml', '.inc', '.txt', '.ini', '.pas', '.pptx', '.map', '.php', '.xlsx', '.rtf', '.hpp', '.h', '.asm', '.xml', '.hh', '.sql', '.java', '.c', '.html', '.inf', '.rb', '.py', '.cs', '.js', '.bat', '.css', '.s', '.cpp', '.csv', '.vue']:
             return TextDocumentsLoader.read_text_file(file_path)
         elif file_path.suffix.lower() in [".msg"]:
             return TextDocumentsLoader.read_msg_file(file_path)
@@ -128,27 +128,53 @@ class TextDocumentsLoader:
     @staticmethod
     def read_pdf_file(file_path: Path) -> str:
         """
-        Read a PDF file and return its content as a string.
+        Read a PDF file and return its content as Markdown.
 
         Args:
             file_path (Path): The path to the PDF file.
 
         Returns:
-            str: The content of the PDF file.
+            str: The content of the PDF file in Markdown format.
         """
-        import PyPDF2
+        try:
+            import PyPDF2
+        except ImportError:
+            PackageManager.install_package("PyPDF2")
+            import PyPDF2
+
         def extract_text_from_pdf(file_path):
             text = ""
             with open(file_path, 'rb') as pdf_file:
                 pdf_reader = PyPDF2.PdfReader(pdf_file)
                 for page in pdf_reader.pages:
-                    text += page.extract_text()
+                    text += page.extract_text() + "\n\n"  # Add extra newline between pages
             return text
-        # Extract text from the PDF
-        text = extract_text_from_pdf(file_path)
 
-        # Convert to Markdown (You may need to implement custom logic based on your specific use case)
-        markdown_text = text.replace('\n', '  \n')  # Adding double spaces at the end of each line for Markdown line breaks
+        def convert_to_markdown(text):
+            # Convert headers
+            text = re.sub(r'^(.+)$\n={3,}', r'# \1', text, flags=re.MULTILINE)
+            text = re.sub(r'^(.+)$\n-{3,}', r'## \1', text, flags=re.MULTILINE)
+            
+            # Convert other potential headers (adjust as needed)
+            text = re.sub(r'^(\d+\.)\s+(.+)$', r'### \1 \2', text, flags=re.MULTILINE)
+            
+            # Convert lists
+            text = re.sub(r'^\s*[•·-]\s+(.+)$', r'- \1', text, flags=re.MULTILINE)
+            text = re.sub(r'^\s*(\d+\.)\s+(.+)$', r'\1 \2', text, flags=re.MULTILINE)
+            
+            # Convert tables (basic conversion, may need adjustment)
+            text = re.sub(r'(\|[^\n]+\|\n)+', lambda m: '|' + m.group(0).replace('\n', '\n|'), text)
+            
+            # Add line breaks
+            text = text.replace('\n', '  \n')
+            
+            return text
+
+        # Extract text from the PDF
+        raw_text = extract_text_from_pdf(file_path)
+        
+        # Convert to Markdown
+        markdown_text = convert_to_markdown(raw_text)
         
         return markdown_text
 
