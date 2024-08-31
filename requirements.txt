@@ -1,7 +1,6 @@
 numpy
-scikit-learn
-gensim
+onnxruntime
 tiktoken
 ascii_colors
 tqdm
-sentence_transformers
+transformers
