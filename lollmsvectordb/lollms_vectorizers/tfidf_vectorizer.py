@@ -8,17 +8,19 @@ Description: Contains the TFIDFVectorizer class for vectorizing text data.
 This file is part of the LoLLMsVectorDB project, a modular text-based database manager for retrieval-augmented generation (RAG), seamlessly integrating with the LoLLMs ecosystem.
 """
 
-from sklearn.feature_extraction.text import TfidfVectorizer as SklearnTfidfVectorizer
+import numpy as np
 from lollmsvectordb.vectorizer import Vectorizer
 from typing import List
+import math
 
 class TFIDFVectorizer(Vectorizer):
     def __init__(self):
         """
-        Initialize the TFIDFVectorizer with the name and the Sklearn TfidfVectorizer.
+        Initialize the TFIDFVectorizer with the name.
         """
         super().__init__("TFIDFVectorizer", True)
-        self.model = None
+        self.vocab = {}
+        self.idf = {}
         self.fitted = False
 
     def fit(self, data: List[str]) -> None:
@@ -28,9 +30,37 @@ class TFIDFVectorizer(Vectorizer):
         Args:
             data (List[str]): The data to fit the vectorizer on.
         """
-        self.model = SklearnTfidfVectorizer()
-        self.model.fit(data)
+        # Build vocabulary
+        vocab_set = set()
+        for document in data:
+            vocab_set.update(document.split())
+        self.vocab = {word: idx for idx, word in enumerate(sorted(vocab_set))}
+
+        # Calculate IDF
+        doc_count = len(data)
+        word_doc_count = np.zeros(len(self.vocab))
+        for document in data:
+            unique_words = set(document.split())
+            for word in unique_words:
+                if word in self.vocab:
+                    word_doc_count[self.vocab[word]] += 1
+
+        self.idf = np.log(doc_count / (1 + word_doc_count))
         self.fitted = True
+
+    def _compute_tfidf(self, tf: np.ndarray, idf: np.ndarray, doc_len: int) -> np.ndarray:
+        """
+        Compute the TF-IDF vector for a single document.
+
+        Args:
+            tf (np.ndarray): Term frequency of words in the document.
+            idf (np.ndarray): IDF values for the vocabulary.
+            doc_len (int): Length of the document.
+
+        Returns:
+            np.ndarray: The TF-IDF vector for the document.
+        """
+        return (tf / doc_len) * idf
 
     def vectorize(self, data: List[str]) -> List[List[float]]:
         """
@@ -42,10 +72,25 @@ class TFIDFVectorizer(Vectorizer):
         Returns:
             List[List[float]]: The transformed data as TFIDF vectors.
         """
-        return self.model.transform(data).toarray()
+        if not self.fitted:
+            raise ValueError("The vectorizer has not been fitted yet. Please call fit() first.")
+
+        vectors = []
+        for document in data:
+            tf = np.zeros(len(self.vocab))
+            words = document.split()
+            for word in words:
+                if word in self.vocab:
+                    tf[self.vocab[word]] += 1
+            doc_len = len(words)
+            doc_vector = self._compute_tfidf(tf, self.idf, doc_len)
+            vectors.append(doc_vector)
+
+        return vectors
     
     def __str__(self):
         return f'Lollms Vector DB TFIDFVectorizer.'
 
     def __repr__(self):
         return f'Lollms Vector DB TFIDFVectorizer.'
+

@@ -82,7 +82,7 @@ class VectorDatabase:
         List of text corresponding to the vectors.
     """
 
-    def __init__(self, db_path: str, vectorizer: Vectorizer, tokenizer: Tokenizer, chunk_size: int = 512, overlap: int = 0, clean_chunks=True, n_neighbors: int = 5, algorithm: str = 'auto', metrics:str="euclidean", reset=False, model: Optional[LLMModel] = None):
+    def __init__(self, db_path: str, vectorizer: Vectorizer, tokenizer: Tokenizer|None=None, chunk_size: int = 512, overlap: int = 0, clean_chunks=True, n_neighbors: int = 5, algorithm: str = 'auto', metrics:str="euclidean", reset=False, model: Optional[LLMModel] = None):
         """
         Initializes the VectorDatabase with the given parameters.
 
@@ -124,7 +124,13 @@ class VectorDatabase:
         """
         self.db_path = db_path
         self.vectorizer = vectorizer
-        self.tokenizer = tokenizer
+        if tokenizer is None and ((hasattr(self.vectorizer, "tokenizer") and self.vectorizer.tokenizer is None) or not hasattr(self.vectorizer, "tokenizer")):
+            ASCIIColors.error("You did not provide a tokenizer and the vectorizer does not provide a tokenizer.\nPlease either privide a tokenizer or use a model that has a tokenizer.")
+        
+        if hasattr(self.vectorizer, "tokenizer") and self.vectorizer.tokenizer is not None:
+            self.tokenizer = self.vectorizer.tokenizer
+        else:
+            self.tokenizer = tokenizer
         self.n_neighbors = n_neighbors
         self.chunk_size = chunk_size
         self.algorithm = algorithm
@@ -715,8 +721,13 @@ class VectorDatabase:
                     FROM chunks 
                 ''')
                 rows = cursor.fetchall()
-                self.vectors = [np.frombuffer(row[0], dtype=np.float32) for row in rows]
-                self.chunk_ids = [row[1] for row in rows]
+                if len(rows)>0 and rows[0] and len(rows[0])>1 and rows[0][0]:
+                    self.vectors = [np.frombuffer(row[0], dtype=np.float32) for row in rows]
+                    self.chunk_ids = [row[1] for row in rows]
+                else:
+                    self.vectors = []
+                    self.chunk_ids = []
+                    ASCIIColors.error("No vectors found in database")
         else:
             ASCIIColors.error("Can't load vectors from database if you don't specify a file path")
 
@@ -737,7 +748,7 @@ class VectorDatabase:
                     if vector is None or revectorize:
                         vector = np.array(self.vectorizer.vectorize([text])[0])
                         self.vectors.append(vector)
-                        self.chunk_ids.append(chunk.chunk_id)
+                        self.chunk_ids.append(chunk_id)
                         vector_blob = vector.tobytes()
                         cursor.execute('UPDATE chunks SET vector = ? WHERE id = ?', (vector_blob, chunk_id))
                     else:
@@ -818,9 +829,9 @@ class VectorDatabase:
                     if force_new_vectorizer:
                         return
                     else:
-                        if result[0]=="BertVectorizer":
+                        if result[0]=="SemanticVectorizer":
                             params = json.loads(result[2])
-                            self.vectorizer = BERTVectorizer(params["model_name"])
+                            self.vectorizer = SemanticVectorizer(params["model_name"])
                         elif  result[0]=="TFIDFVectorizer":
                             self.vectorizer = TFIDFVectorizer()
                 else:
@@ -1064,10 +1075,10 @@ class VectorDatabase:
 if __name__ == "__main__":
     # Example with TFIDFVectorizer
     from lollmsvectordb import TFIDFVectorizer
-    from lollmsvectordb.lollms_vectorizers.bert_vectorizer import BERTVectorizer
+    from lollmsvectordb.lollms_vectorizers.semantic_vectorizer import SemanticVectorizer
 
     
-    db = VectorDatabase("vector_db.sqlite", BERTVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) # 
+    db = VectorDatabase("vector_db.sqlite", SemanticVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) # 
 
     # Add multiple documents to the database
     documents = [

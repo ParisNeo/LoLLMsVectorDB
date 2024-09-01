@@ -3,7 +3,7 @@ LoLLMsVectorDB
 
 File: bert_vectorizer.py
 Author: ParisNeo
-Description: Contains the BERTVectorizer class for vectorizing text data using Hugging Face's transformers.
+Description: Contains the SemanticVectorizer class for vectorizing text data using Hugging Face's transformers.
 
 This file is part of the LoLLMsVectorDB project, a modular text-based database manager for retrieval-augmented generation (RAG), seamlessly integrating with the LoLLMs ecosystem.
 """
@@ -33,49 +33,57 @@ from lollmsvectordb.vectorizer import Vectorizer
 from typing import List
 import json
 
-class BERTVectorizer(Vectorizer):
+class SemanticVectorizer(Vectorizer):
     _model_cache = {}
     _model_ref_count = {}
 
     def __init__(self, model_name: str = 'bert-base-uncased'):
         """
-        Initializes the BERTVectorizer with a specified BERT model.
+        Initializes the SemanticVectorizer with a specified BERT model.
 
         Args:
             model_name (str): The name of the pre-trained BERT model to use.
         """
-        super().__init__("BertVectorizer")
+        super().__init__("SemanticVectorizer")
+        if model_name=="bert-base-nli-mean-tokens":
+            model_name = "sentence-transformers/bert-base-nli-mean-tokens"
         ASCIIColors.multicolor(["LollmsVectorDB>", f"Loading Pretrained BERT model {model_name} ..."], [ASCIIColors.color_red, ASCIIColors.color_cyan], end="", flush=True)
-
-        if model_name in BERTVectorizer._model_cache:
-            self.tokenizer, self.model_ = BERTVectorizer._model_cache[model_name]
-            BERTVectorizer._model_ref_count[model_name] += 1
-            ASCIIColors.success(f"Loaded {model_name} from cache")
-        else:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.model_ = AutoModel.from_pretrained(model_name)
-            BERTVectorizer._model_cache[model_name] = (self.tokenizer, self.model_)
-            BERTVectorizer._model_ref_count[model_name] = 1
-            ASCIIColors.success("OK")
-
         self.parameters = {
             "model_name": model_name
         }
 
-        ASCIIColors.multicolor(["LollmsVectorDB>", f" Parameters:"], [ASCIIColors.color_red, ASCIIColors.color_bright_green])
-        ASCIIColors.yellow(json.dumps(self.parameters, indent=4))
-        self.fitted = True
+        if model_name in SemanticVectorizer._model_cache:
+            self.tokenizer, self.model_ = SemanticVectorizer._model_cache[model_name]
+            SemanticVectorizer._model_ref_count[model_name] += 1
+            ASCIIColors.success(f"Loaded {model_name} from cache")
+        else:
+            try:
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+                self.model_ = AutoModel.from_pretrained(model_name)
+                SemanticVectorizer._model_cache[model_name] = (self.tokenizer, self.model_)
+                SemanticVectorizer._model_ref_count[model_name] = 1
+                ASCIIColors.success("OK")
+
+                ASCIIColors.multicolor(["LollmsVectorDB>", f" Parameters:"], [ASCIIColors.color_red, ASCIIColors.color_bright_green])
+                ASCIIColors.yellow(json.dumps(self.parameters, indent=4))
+                self.fitted = True
+            except:
+                self.tokenizer = None
+                self.model_ = None
+                self.fitted = False
+                ASCIIColors.multicolor(["LollmsVectorDB>", f" Couldn't load the embedding model. Either the model doesn't exist or the model exists but you have trouble connecting to hugging face. Please verify your internet connection or change the rag model in the settings."], [ASCIIColors.color_red, ASCIIColors.color_bright_green])
+
 
     def __del__(self):
         """
         Destructor to manage the lifecycle of the model.
         """
         try:
-            if self.parameters["model_name"] in BERTVectorizer._model_ref_count:
-                BERTVectorizer._model_ref_count[self.parameters["model_name"]] -= 1
-                if BERTVectorizer._model_ref_count[self.parameters["model_name"]] == 0:
-                    del BERTVectorizer._model_cache[self.parameters["model_name"]]
-                    del BERTVectorizer._model_ref_count[self.parameters["model_name"]]
+            if self.parameters["model_name"] in SemanticVectorizer._model_ref_count:
+                SemanticVectorizer._model_ref_count[self.parameters["model_name"]] -= 1
+                if SemanticVectorizer._model_ref_count[self.parameters["model_name"]] == 0:
+                    del SemanticVectorizer._model_cache[self.parameters["model_name"]]
+                    del SemanticVectorizer._model_ref_count[self.parameters["model_name"]]
                     ASCIIColors.success(f"Released model {self.parameters['model_name']} from cache")
         except Exception as ex:
             trace_exception(ex)
@@ -102,7 +110,7 @@ class BERTVectorizer(Vectorizer):
         """
         embeddings = []
         for text in data:
-            inputs = self.tokenizer(text, return_tensors='pt', truncation=True, padding=True)
+            inputs = self.tokenizer(text, return_tensors='pt', truncation=True, padding=True, max_length=512)
             with torch.no_grad():
                 outputs = self.model_(**inputs)
             # Use the mean of the last hidden state as the sentence embedding
@@ -115,6 +123,7 @@ class BERTVectorizer(Vectorizer):
         Returns a list of model names
         """
         return [
+            "gpt2",
             "bert-base-uncased",
             "bert-base-multilingual-uncased",
             "bert-large-uncased",
@@ -136,8 +145,8 @@ class BERTVectorizer(Vectorizer):
 
     def __str__(self):
         model_name = self.parameters['model_name']
-        return f'Lollms Vector DB BERTVectorizer. Using model {model_name}.'
+        return f'Lollms Vector DB SemanticVectorizer. Using model {model_name}.'
 
     def __repr__(self):
         model_name = self.parameters['model_name']
-        return f'Lollms Vector DB BERTVectorizer. Using model {model_name}.'
+        return f'Lollms Vector DB SemanticVectorizer. Using model {model_name}.'
