@@ -10,7 +10,7 @@ requirements = (this_directory / "requirements.txt").read_text().splitlines()
 
 setup(
     name='lollmsvectordb',
-    version='1.0.2',
+    version='1.0.6',
     description='A modular text-based database manager for retrieval-augmented generation (RAG), seamlessly integrating with the LoLLMs ecosystem.',
     long_description=long_description,
     long_description_content_type='text/markdown',

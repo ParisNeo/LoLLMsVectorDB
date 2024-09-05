@@ -5,4 +5,3 @@ from lollmsvectordb.tokenizer import Tokenizer
 from lollmsvectordb.vectorizer import Vectorizer
 from lollmsvectordb.lollms_vectorizers.tfidf_vectorizer import TFIDFVectorizer
 from lollmsvectordb.lollms_vectorizers.semantic_vectorizer import SemanticVectorizer
-#from lollmsvectordb.vectorizers.word2vec_vectorizer import Word2VecVectorizer

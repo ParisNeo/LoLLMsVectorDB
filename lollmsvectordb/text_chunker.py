@@ -15,7 +15,7 @@ class TextChunker:
 
 
 
-    def get_text_chunks(self, text: str, doc: Document, clean_chunk: bool = True, min_nb_tokens_in_chunk: int = 10) -> List[Chunk]:
+    def get_text_chunks(self, text: str, doc: Document, clean_chunk: bool = True, min_nb_tokens_in_chunk: int = 1) -> List[Chunk]:
         """
         Splits the input text into chunks based on the specified chunk size and overlap.
 
@@ -28,6 +28,7 @@ class TextChunker:
         Returns:
             List[Chunk]: A list of Chunk objects.
         """
+        paragraph_tokens = len(self.tokenizer.tokenize(text))
         paragraphs = text.split('\n\n')
         chunks = []
         current_chunk = []

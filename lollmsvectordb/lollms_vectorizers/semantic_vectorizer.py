@@ -8,26 +8,8 @@ Description: Contains the SemanticVectorizer class for vectorizing text data usi
 This file is part of the LoLLMsVectorDB project, a modular text-based database manager for retrieval-augmented generation (RAG), seamlessly integrating with the LoLLMs ecosystem.
 """
 from ascii_colors import ASCIIColors, trace_exception
-try:
-    from transformers import AutoTokenizer, AutoModel
-except Exception as ex:
-    trace_exception(ex)
-    ASCIIColors.red("transformers has a problem. Reinstalling it")
-    import pipmaster as pm
-    pm.install("transformers", force_reinstall=True, upgrade=True)
-    try:
-        from transformers import AutoTokenizer, AutoModel
-    except Exception as ex:
-        trace_exception(ex)
-        ASCIIColors.error("Warning! Transformers is broken. Try to manually reinstall pytorch and then reinstall transformers")
-        class AutoTokenizer:
-            def __init__(self, model_name="") -> None:
-                self.model = model_name
-        class AutoModel:
-            def __init__(self, model_name="") -> None:
-                self.model = model_name
 
-import torch
+
 import numpy as np
 from lollmsvectordb.vectorizer import Vectorizer
 from typing import List
@@ -47,7 +29,7 @@ class SemanticVectorizer(Vectorizer):
         super().__init__("SemanticVectorizer")
         if model_name=="bert-base-nli-mean-tokens":
             model_name = "sentence-transformers/bert-base-nli-mean-tokens"
-        ASCIIColors.multicolor(["LollmsVectorDB>", f"Loading Pretrained BERT model {model_name} ..."], [ASCIIColors.color_red, ASCIIColors.color_cyan], end="", flush=True)
+        ASCIIColors.multicolor(["LollmsVectorDB>", f"Loading Pretrained Semantic model {model_name} ..."], [ASCIIColors.color_red, ASCIIColors.color_cyan], end="", flush=True)
         self.parameters = {
             "model_name": model_name
         }
@@ -57,6 +39,26 @@ class SemanticVectorizer(Vectorizer):
             SemanticVectorizer._model_ref_count[model_name] += 1
             ASCIIColors.success(f"Loaded {model_name} from cache")
         else:
+            try:
+                from transformers import AutoTokenizer, AutoModel
+            except Exception as ex:
+                trace_exception(ex)
+                ASCIIColors.red("transformers has a problem. Reinstalling it")
+                import pipmaster as pm
+                pm.install("transformers", force_reinstall=True, upgrade=True)
+                try:
+                    from transformers import AutoTokenizer, AutoModel
+                except Exception as ex:
+                    trace_exception(ex)
+                    ASCIIColors.error("Warning! Transformers is broken. Try to manually reinstall pytorch and then reinstall transformers")
+                    class AutoTokenizer:
+                        def __init__(self, model_name="") -> None:
+                            self.model = model_name
+                    class AutoModel:
+                        def __init__(self, model_name="") -> None:
+                            self.model = model_name
+            
+
             try:
                 self.tokenizer = AutoTokenizer.from_pretrained(model_name)
                 self.model_ = AutoModel.from_pretrained(model_name)
@@ -108,6 +110,7 @@ class SemanticVectorizer(Vectorizer):
         Returns:
             List[np.ndarray]: The list of BERT embeddings for each input text.
         """
+        import torch
         embeddings = []
         for text in data:
             inputs = self.tokenizer(text, return_tensors='pt', truncation=True, padding=True, max_length=512)

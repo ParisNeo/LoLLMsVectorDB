@@ -11,7 +11,7 @@ This file is part of the LoLLMsVectorDB project, a modular text-based database m
 import numpy as np
 import sqlite3
 import hashlib
-from sklearn.neighbors import NearestNeighbors
+from lollmsvectordb.algorithms.kneighbors import NearestNeighbors
 from lollmsvectordb.vectorizer import Vectorizer
 from lollmsvectordb.tokenizer import Tokenizer
 from lollmsvectordb.lollms_tokenizers.tiktoken_tokenizer import TikTokenTokenizer
@@ -460,7 +460,7 @@ class VectorDatabase:
             
         return text_result, dict_result
      
-    def add_document(self, title: str, text: str, path: Union[str, Path]="unknown", force_update=False, min_nb_tokens_in_chunk=10, category_id=None, subcategory_id=None):
+    def add_document(self, title: str, text: str, path: Union[str, Path]="unknown", force_update=False, min_nb_tokens_in_chunk=1, category_id=None, subcategory_id=None):
         """
         Adds a document and its chunks to the database.
 
@@ -881,8 +881,9 @@ class VectorDatabase:
         self.load_vectorizer_model()
         if self.vectorizer.fitted:
             ASCIIColors.multicolor(["LollmsVectorDB> ", "Vectorizer is ready"], [ASCIIColors.color_red, ASCIIColors.color_green])
-            if self.db_path!="":
+            if self.db_path!="" and Path(self.db_path).exists():
                 self._load_vectors()
+            
         else:
             if self.vectorizer.requires_fitting and self.vectorizer.model is None:
                 if self.db_path!="":

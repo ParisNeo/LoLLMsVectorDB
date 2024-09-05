@@ -1,8 +1,9 @@
-numpy
-onnxruntime
+numpy==1.26.3
 tiktoken
 ascii_colors
 tqdm
 transformers
 PyPDF2
 openai
+sqlite3
+dpkt
