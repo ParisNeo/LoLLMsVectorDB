@@ -1,4 +1,6 @@
 import numpy as np
+import heapq
+from collections import defaultdict
 
 class NearestNeighbors:
     def __init__(self, n_neighbors=5, algorithm='auto', metric='euclidean', leaf_size=30):
@@ -8,6 +10,7 @@ class NearestNeighbors:
         self.leaf_size = leaf_size
         self.X = None
         self.tree = None
+        self.hnsw_graph = None
 
     def fit(self, X):
         self.X = np.array(X)
@@ -19,15 +22,13 @@ class NearestNeighbors:
             else:
                 self.algorithm = 'brute'
         
-        if self.algorithm in ['kd_tree', 'ball_tree']:
-            self.tree = self._build_tree()
-        return self
-
-    def _build_tree(self):
         if self.algorithm == 'kd_tree':
-            return self._build_kd_tree(self.X, depth=0)
+            self.tree = self._build_kd_tree(self.X, depth=0)
         elif self.algorithm == 'ball_tree':
-            return self._build_ball_tree(self.X)
+            self.tree = self._build_ball_tree(self.X)
+        elif self.algorithm == 'hnsw':
+            self.hnsw_graph = self._build_hnsw_graph()
+        return self
 
     def _build_kd_tree(self, X, depth):
         if len(X) <= self.leaf_size:
@@ -47,7 +48,6 @@ class NearestNeighbors:
         if len(X) <= self.leaf_size:
             return {'center': np.mean(X, axis=0), 'radius': self._max_distance(X), 'points': X}
         
-        # Simple split on the dimension with largest variance
         axis = np.argmax(np.var(X, axis=0))
         median = np.median(X[:, axis])
         left = X[X[:, axis] < median]
@@ -60,18 +60,48 @@ class NearestNeighbors:
             'right': self._build_ball_tree(right)
         }
 
+    def _build_hnsw_graph(self, M=5, ef_construction=100):
+        n_samples = len(self.X)
+        graph = defaultdict(set)
+        
+        for i in range(n_samples):
+            if i == 0:
+                continue
+            
+            curr_point = self.X[i]
+            curr_neighbors = set()
+            
+            # Find ef_construction nearest neighbors
+            candidates = [(self._distance(curr_point, self.X[j]), j) for j in range(i)]
+            candidates.sort()
+            
+            for _, neighbor in candidates[:ef_construction]:
+                curr_neighbors.add(neighbor)
+                if len(curr_neighbors) >= M and len(graph[neighbor]) >= M:
+                    break
+            
+            # Add edges
+            for neighbor in curr_neighbors:
+                graph[i].add(neighbor)
+                graph[neighbor].add(i)
+            
+            # Ensure each node has at most M neighbors
+            if len(graph[i]) > M:
+                graph[i] = set(sorted(graph[i], key=lambda x: self._distance(curr_point, self.X[x]))[:M])
+        
+        return graph
+
     def _max_distance(self, X):
         center = np.mean(X, axis=0)
         return np.max(np.sqrt(np.sum((X - center)**2, axis=1)))
 
-    def cosine_distance(self, X, Y):
-        X_norm = np.sqrt(np.sum(X**2, axis=1))[:, np.newaxis]
-        Y_norm = np.sqrt(np.sum(Y**2, axis=1))[np.newaxis, :]
-        cosine_sim = np.dot(X, Y.T) / (X_norm * Y_norm)
-        return 1 - cosine_sim
-
-    def euclidean_distance(self, X, Y):
-        return np.sqrt(((X[:, np.newaxis, :] - Y[np.newaxis, :, :])**2).sum(axis=2))
+    def _distance(self, x, y):
+        if self.metric == 'euclidean':
+            return np.sqrt(np.sum((x - y)**2))
+        elif self.metric == 'cosine':
+            return 1 - np.dot(x, y) / (np.linalg.norm(x) * np.linalg.norm(y))
+        else:
+            raise ValueError("Only 'euclidean' and 'cosine' metrics are implemented.")
 
     def kneighbors(self, X=None, n_neighbors=None, return_distance=True):
         if X is None:
@@ -86,15 +116,11 @@ class NearestNeighbors:
             return self._kneighbors_brute(X, n_neighbors, return_distance)
         elif self.algorithm in ['kd_tree', 'ball_tree']:
             return self._kneighbors_tree(X, n_neighbors, return_distance)
+        elif self.algorithm == 'hnsw':
+            return self._kneighbors_hnsw(X, n_neighbors, return_distance)
 
     def _kneighbors_brute(self, X, n_neighbors, return_distance):
-        if self.metric == 'cosine':
-            distances = self.cosine_distance(X, self.X)
-        elif self.metric == 'euclidean':
-            distances = self.euclidean_distance(X, self.X)
-        else:
-            raise ValueError("Only 'cosine' and 'euclidean' metrics are implemented.")
-        
+        distances = np.array([[self._distance(x, y) for y in self.X] for x in X])
         indices = np.argsort(distances, axis=1)[:, :n_neighbors]
         
         if return_distance:
@@ -109,12 +135,12 @@ class NearestNeighbors:
                 return
             
             if 'points' in node:  # Leaf node
-                distances = self.euclidean_distance(point[np.newaxis, :], node['points']).flatten()
-                for i, dist in enumerate(distances):
+                for i, p in enumerate(node['points']):
+                    dist = self._distance(point, p)
                     if len(heap) < n_neighbors or dist < -heap[0][0]:
                         if len(heap) == n_neighbors:
                             heapq.heappop(heap)
-                        heapq.heappush(heap, (-dist, node['points'][i]))
+                        heapq.heappush(heap, (-dist, p))
             else:
                 if self.algorithm == 'kd_tree':
                     axis = len(point) % point.shape[0]
@@ -127,7 +153,7 @@ class NearestNeighbors:
                         if len(heap) < n_neighbors or abs(point[axis] - node['point'][axis]) < -heap[0][0]:
                             search_tree(node['left'], point, heap)
                 elif self.algorithm == 'ball_tree':
-                    dist_to_center = np.linalg.norm(point - node['center'])
+                    dist_to_center = self._distance(point, node['center'])
                     if len(heap) < n_neighbors or dist_to_center - node['radius'] < -heap[0][0]:
                         search_tree(node['left'], point, heap)
                         search_tree(node['right'], point, heap)
@@ -144,6 +170,42 @@ class NearestNeighbors:
         if return_distance:
             return distances[:, :n_neighbors], indices
         else:
+            return indices
+
+    def _kneighbors_hnsw(self, X, n_neighbors, return_distance, ef_search=50):
+        def search_hnsw(query, ef):
+            entry_point = 0
+            visited = set()
+            candidates = [(self._distance(query, self.X[entry_point]), entry_point)]
+            heapq.heapify(candidates)
+            
+            while candidates:
+                _, current = heapq.heappop(candidates)
+                if current in visited:
+                    continue
+                visited.add(current)
+                
+                for neighbor in self.hnsw_graph[current]:
+                    if neighbor not in visited:
+                        dist = self._distance(query, self.X[neighbor])
+                        if len(candidates) < ef or dist < -candidates[0][0]:
+                            heapq.heappush(candidates, (-dist, neighbor))
+                        if len(candidates) > ef:
+                            heapq.heappop(candidates)
+            
+            return [(-dist, idx) for dist, idx in candidates]
+
+        results = []
+        for point in X:
+            neighbors = search_hnsw(point, ef_search)
+            results.append(sorted(neighbors)[:n_neighbors])
+        
+        if return_distance:
+            distances = np.array([[d for d, _ in r] for r in results])
+            indices = np.array([[i for _, i in r] for r in results])
+            return distances, indices
+        else:
+            indices = np.array([[i for _, i in r] for r in results])
             return indices
 
     def kneighbors_graph(self, X=None, n_neighbors=None, mode='connectivity'):
