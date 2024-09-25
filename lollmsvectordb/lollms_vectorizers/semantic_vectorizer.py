@@ -14,6 +14,39 @@ import numpy as np
 from lollmsvectordb.vectorizer import Vectorizer
 from typing import List
 import json
+import pipmaster as pm
+
+def import_modules():
+    try:
+        from transformers import AutoTokenizer, AutoModel
+        return AutoTokenizer, AutoModel
+    except Exception as ex:
+        trace_exception(ex)
+        ASCIIColors.red("transformers has a problem. Do you wish me to reinstall it?","")
+        user_input = input("Do you wish to reinstall transformers? (y/n): ").lower()
+        if user_input == 'y':
+            pm.install("transformers", force_reinstall=True, upgrade=True)
+            try:
+                from transformers import AutoTokenizer, AutoModel
+            except Exception as ex:
+                trace_exception(ex)
+                ASCIIColors.error("Warning! Transformers is broken. Try to manually reinstall pytorch and then reinstall transformers")
+                class AutoTokenizer:
+                    def __init__(self, model_name="") -> None:
+                        self.model = model_name
+                class AutoModel:
+                    def __init__(self, model_name="") -> None:
+                        self.model = model_name
+                return AutoTokenizer, AutoModel
+        else:
+            class AutoTokenizer:
+                def __init__(self, model_name="") -> None:
+                    self.model = model_name
+            class AutoModel:
+                def __init__(self, model_name="") -> None:
+                    self.model = model_name
+            return AutoTokenizer, AutoModel
+
 
 class SemanticVectorizer(Vectorizer):
     _model_cache = {}
@@ -39,24 +72,6 @@ class SemanticVectorizer(Vectorizer):
             SemanticVectorizer._model_ref_count[model_name] += 1
             ASCIIColors.success(f"Loaded {model_name} from cache")
         else:
-            try:
-                from transformers import AutoTokenizer, AutoModel
-            except Exception as ex:
-                trace_exception(ex)
-                ASCIIColors.red("transformers has a problem. Reinstalling it")
-                import pipmaster as pm
-                pm.install("transformers", force_reinstall=True, upgrade=True)
-                try:
-                    from transformers import AutoTokenizer, AutoModel
-                except Exception as ex:
-                    trace_exception(ex)
-                    ASCIIColors.error("Warning! Transformers is broken. Try to manually reinstall pytorch and then reinstall transformers")
-                    class AutoTokenizer:
-                        def __init__(self, model_name="") -> None:
-                            self.model = model_name
-                    class AutoModel:
-                        def __init__(self, model_name="") -> None:
-                            self.model = model_name
             
 
             try:

@@ -1,13 +1,7 @@
 from pathlib import Path
 from typing import List
 import re
-
-class PackageManager:
-    @staticmethod
-    def install_package(package_name):
-        import subprocess
-        import sys
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+import pipmaster as pm
  
 class TextDocumentsLoader:
     @staticmethod
@@ -139,7 +133,7 @@ class TextDocumentsLoader:
         try:
             import PyPDF2
         except ImportError:
-            PackageManager.install_package("PyPDF2")
+            pm.install("PyPDF2", force_reinstall=True, upgrade=True)
             import PyPDF2
 
         def extract_text_from_pdf(file_path):
@@ -193,7 +187,7 @@ class TextDocumentsLoader:
         try:
             from docx import Document
         except ImportError:
-            PackageManager.install_package("python-docx")
+            pm.install("python-docx", force_reinstall=True, upgrade=True)
             from docx import Document
         doc = Document(file_path)
         text = ""
@@ -216,8 +210,8 @@ class TextDocumentsLoader:
             import pandas as pd
             import openpyxl
         except ImportError:
-            PackageManager.install_package("openpyxl")
-            PackageManager.install_package("pandas")
+            pm.install("openpyxl", force_reinstall=True, upgrade=True)
+            pm.install("pandas", force_reinstall=True, upgrade=True)
             import pandas as pd
         xls = pd.read_excel(file_path)
 
@@ -266,7 +260,7 @@ class TextDocumentsLoader:
         try:
             from bs4 import BeautifulSoup
         except ImportError:
-            PackageManager.install_package("beautifulsoup4")
+            pm.install("beautifulsoup4", force_reinstall=True, upgrade=True)
             from bs4 import BeautifulSoup
         with open(file_path, 'r') as file:
             soup = BeautifulSoup(file, 'html.parser')
@@ -287,7 +281,7 @@ class TextDocumentsLoader:
         try:
             from pptx import Presentation
         except ImportError:
-            PackageManager.install_package("python-pptx")
+            pm.install("python-pptx", force_reinstall=True, upgrade=True)
             from pptx import Presentation
         prs = Presentation(file_path)
         text = ""
@@ -325,14 +319,22 @@ class TextDocumentsLoader:
         Returns:
             str: The content of the text file.
         """
-        import extract_msg
+        try:
+            import extract_msg
+        except ImportError:
+            pm.install("extract-msg", force_reinstall=True, upgrade=True)
+            import extract_msg
         # Implementation details omitted for brevity
         msg = extract_msg.Message(file_path)
         msg_message = msg.body
         return msg_message
 
     def load_msg_as_text(file_path):
-        import extract_msg
+        try:
+            import extract_msg
+        except ImportError:
+            pm.install("extract-msg", force_reinstall=True, upgrade=True)
+            import extract_msg
         msg = extract_msg.Message(file_path)
         # Extract the relevant parts of the email
         subject = f"Subject: {msg.subject}\n"

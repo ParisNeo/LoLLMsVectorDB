@@ -73,7 +73,7 @@ class TFIDFVectorizer(Vectorizer):
             List[List[float]]: The transformed data as TFIDF vectors.
         """
         if not self.fitted:
-            raise ValueError("The vectorizer has not been fitted yet. Please call fit() first.")
+            self.fit(data)
 
         vectors = []
         for document in data:

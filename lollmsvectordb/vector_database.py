@@ -28,7 +28,7 @@ from lollmsvectordb.database_elements.chunk import Chunk
 from lollmsvectordb.text_chunker import TextChunker
 from lollmsvectordb.llm_model import LLMModel
 
-__version__ = 3
+__version__ = 4
 
 def replace_nan_with_zero(arrays: List[np.ndarray]) -> List[int]:
     """
@@ -275,7 +275,8 @@ class VectorDatabase:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS database_info (
                     id INTEGER PRIMARY KEY,
-                    version INT NOT NULL
+                    version INT NOT NULL,
+                    vectorizer_type TEXT NOT NULL
                 )
             ''')
 
@@ -312,7 +313,16 @@ class VectorDatabase:
             # If there is no entry, insert the version number
             if count == 0:
                 cursor.execute('INSERT INTO database_info (version) VALUES (?)', (__version__,))
-                conn.commit()            
+            else:
+                # Check current database version and structure
+                cursor.execute('PRAGMA table_info(database_info)')
+                columns = [col[1] for col in cursor.fetchall()]
+                
+                if 'version' not in columns:
+                    cursor.execute(f'ALTER TABLE database_info ADD COLUMN version INTEGER NOT NULL DEFAULT {__version__}')
+                
+                if 'vectorizer_type' not in columns:
+                    cursor.execute('ALTER TABLE database_info ADD COLUMN vectorizer_type TEXT NOT NULL DEFAULT "default"')
             conn.commit()
 
     def _hash_document(self, text: str) -> str:
@@ -717,17 +727,33 @@ class VectorDatabase:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    SELECT chunks.vector, chunks.chunk_id
-                    FROM chunks 
+                    SELECT vectorizer_type
+                    FROM database_info 
                 ''')
-                rows = cursor.fetchall()
-                if len(rows)>0 and rows[0] and len(rows[0])>1 and rows[0][0]:
-                    self.vectors = [np.frombuffer(row[0], dtype=np.float32) for row in rows]
-                    self.chunk_ids = [row[1] for row in rows]
+                rows = cursor.fetchall()     
+                if rows[0]==self.vectorizer.name:       
+                    cursor.execute('''
+                        SELECT chunks.vector, chunks.chunk_id
+                        FROM chunks 
+                    ''')
+                    rows = cursor.fetchall()
+                    if len(rows)>0 and rows[0] and len(rows[0])>1 and rows[0][0]:
+                        self.vectors = [np.frombuffer(row[0], dtype=np.float32) for row in rows]
+                        self.chunk_ids = [row[1] for row in rows]
+                    else:
+                        self.vectors = []
+                        self.chunk_ids = []
+                        ASCIIColors.error("No vectors found in database")
                 else:
-                    self.vectors = []
-                    self.chunk_ids = []
-                    ASCIIColors.error("No vectors found in database")
+                    ASCIIColors.error("Vectorizer not compatible with the content")
+                    self._update_vectors(True)
+                    cursor.execute('''
+                        UPDATE database_info
+                        SET vectorizer_type = ?
+                    ''', (self.vectorizer.name,))
+
+                    # Commit the changes
+                    conn.commit()
         else:
             ASCIIColors.error("Can't load vectors from database if you don't specify a file path")
 
@@ -743,6 +769,8 @@ class VectorDatabase:
                 cursor.execute('SELECT id, text, vector FROM chunks')
                 rows = cursor.fetchall()
                 ASCIIColors.multicolor(["LollmsVectorDB> ", f"Vectorizing {len(rows)} chunks"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
+                if not self.vectorizer.fitted:
+                    self.vectorizer.fit([r[1] for r in rows])
                 for row in tqdm(rows):
                     chunk_id, text, vector = row
                     if vector is None or revectorize:
@@ -1079,7 +1107,7 @@ if __name__ == "__main__":
     from lollmsvectordb.lollms_vectorizers.semantic_vectorizer import SemanticVectorizer
 
     
-    db = VectorDatabase("vector_db.sqlite", SemanticVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) # 
+    db = VectorDatabase("vector_db.sqlite", TFIDFVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) # 
 
     # Add multiple documents to the database
     documents = [

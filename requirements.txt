@@ -5,5 +5,10 @@ tqdm
 transformers
 PyPDF2
 openai
-sqlite3
 dpkt
+pipmaster
+python-docx
+pandas
+openpyxl
+beautifulsoup4
+extract-msg
