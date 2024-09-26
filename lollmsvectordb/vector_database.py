@@ -312,7 +312,12 @@ class VectorDatabase:
 
             # If there is no entry, insert the version number
             if count == 0:
-                cursor.execute('INSERT INTO database_info (version) VALUES (?)', (__version__,))
+                # Check current database version and structure
+                cursor.execute('PRAGMA table_info(database_info)')
+                columns = [col[1] for col in cursor.fetchall()]
+                if 'vectorizer_type' not in columns:
+                    cursor.execute(f'ALTER TABLE database_info ADD COLUMN vectorizer_type TEXT NOT NULL DEFAULT "{self.vectorizer.name}"')
+                cursor.execute('INSERT INTO database_info (version, vectorizer_type) VALUES (?,?)', (__version__, self.vectorizer.name))
             else:
                 # Check current database version and structure
                 cursor.execute('PRAGMA table_info(database_info)')
@@ -322,7 +327,10 @@ class VectorDatabase:
                     cursor.execute(f'ALTER TABLE database_info ADD COLUMN version INTEGER NOT NULL DEFAULT {__version__}')
                 
                 if 'vectorizer_type' not in columns:
-                    cursor.execute('ALTER TABLE database_info ADD COLUMN vectorizer_type TEXT NOT NULL DEFAULT "default"')
+                    try:
+                        cursor.execute(f'ALTER TABLE database_info ADD COLUMN vectorizer_type TEXT NOT NULL DEFAULT "{self.vectorizer.name}"')
+                    except:
+                        ASCIIColors.error("Couldn't update the database_info table")
             conn.commit()
 
     def _hash_document(self, text: str) -> str:

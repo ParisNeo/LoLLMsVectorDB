@@ -75,6 +75,7 @@ class SemanticVectorizer(Vectorizer):
             
 
             try:
+                AutoTokenizer, AutoModel = import_modules()
                 self.tokenizer = AutoTokenizer.from_pretrained(model_name)
                 self.model_ = AutoModel.from_pretrained(model_name)
                 SemanticVectorizer._model_cache[model_name] = (self.tokenizer, self.model_)
