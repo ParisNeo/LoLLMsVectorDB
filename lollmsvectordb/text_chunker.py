@@ -103,20 +103,28 @@ class TextChunker:
                 if len(tokenizer.tokenize(current_sentence + sentence)) > chunk_size:
                     if current_sentence:
                         split_sentences.append(current_sentence.strip())
-                    words = sentence.split()
-                    current_sentence = ""
-                    for word in words:
-                        if len(tokenizer.tokenize(current_sentence + word)) > chunk_size:
-                            if current_sentence:
-                                split_sentences.append(current_sentence.strip())
-                            current_sentence = word + " "
-                        else:
-                            current_sentence += word + " "
+                    
+                    # Handle very long sentences
+                    if len(tokenizer.tokenize(sentence)) > chunk_size:
+                        words = sentence.split()
+                        current_sentence = ""
+                        for word in words:
+                            if len(tokenizer.tokenize(current_sentence + word)) > chunk_size:
+                                if current_sentence:
+                                    split_sentences.append(current_sentence.strip())
+                                current_sentence = word + " "
+                            else:
+                                current_sentence += word + " "
+                    else:
+                        current_sentence = sentence + " "
                 else:
                     current_sentence += sentence + " "
+            
             if current_sentence:
                 split_sentences.append(current_sentence.strip())
+            
             return split_sentences
+
 
         paragraphs = text.split('\n')
         chunks = []
