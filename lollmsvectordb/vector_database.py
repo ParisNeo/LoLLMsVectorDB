@@ -776,32 +776,40 @@ class VectorDatabase:
                 cursor = conn.cursor()
                 cursor.execute('SELECT id, text, vector FROM chunks')
                 rows = cursor.fetchall()
-                ASCIIColors.multicolor(["LollmsVectorDB> ", f"Vectorizing {len(rows)} chunks"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
-                if not self.vectorizer.fitted:
-                    self.vectorizer.fit([r[1] for r in rows])
-                for row in tqdm(rows):
-                    chunk_id, text, vector = row
-                    if vector is None or revectorize:
-                        vector = np.array(self.vectorizer.vectorize([text])[0])
-                        self.vectors.append(vector)
-                        self.chunk_ids.append(chunk_id)
-                        vector_blob = vector.tobytes()
-                        cursor.execute('UPDATE chunks SET vector = ? WHERE id = ?', (vector_blob, chunk_id))
-                    else:
-                        self.vectors.append(np.frombuffer(vector, dtype=np.float32))
-                conn.commit()
+                if len(rows)>0:
+                    ASCIIColors.multicolor(["LollmsVectorDB> ", f"Vectorizing {len(rows)} chunks"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
+                    if not self.vectorizer.fitted:
+                        self.vectorizer.fit([r[1] for r in rows])
+                    for row in tqdm(rows):
+                        chunk_id, text, vector = row
+                        if vector is None or revectorize:
+                            vector = np.array(self.vectorizer.vectorize([text])[0])
+                            self.vectors.append(vector)
+                            self.chunk_ids.append(chunk_id)
+                            vector_blob = vector.tobytes()
+                            cursor.execute('UPDATE chunks SET vector = ? WHERE id = ?', (vector_blob, chunk_id))
+                        else:
+                            self.vectors.append(np.frombuffer(vector, dtype=np.float32))
+                    conn.commit()
+                else:
+                    if len(self.chunks)>0:
+                        self.apply_vectorization()
         else:
-            try:
-                ASCIIColors.multicolor(["LollmsVectorDB> ", f"Vectorizing {len(self.chunks)} chunks"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
-                for chunk in tqdm(self.chunks):
-                    vector = self.vectorizer.vectorize([chunk.text])[0]
-                    chunk.vector = vector
-                    self.vectors.append(vector)
-                    self.chunk_ids.append(chunk.chunk_id)
-            except Exception as ex:
-                trace_exception(ex)
-                ASCIIColors.error("Document Not found!")
-
+            self.apply_vectorization()
+        
+    def apply_vectorization(self):
+        try:
+            if not self.vectorizer.fitted:
+                self.vectorizer.fit([c.text for c in self.chunks])
+            ASCIIColors.multicolor(["LollmsVectorDB> ", f"Vectorizing {len(self.chunks)} chunks"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
+            for chunk in tqdm(self.chunks):
+                vector = self.vectorizer.vectorize([chunk.text])[0]
+                chunk.vector = vector
+                self.vectors.append(vector)
+                self.chunk_ids.append(chunk.chunk_id)
+        except Exception as ex:
+            trace_exception(ex)
+            ASCIIColors.error("Document Not found!")
 
     def store_kneighbors_model(self) -> None:
         """
