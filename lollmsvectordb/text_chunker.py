@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from pathlib import Path
 from lollmsvectordb.tokenizer import Tokenizer
 from lollmsvectordb.lollms_tokenizers.tiktoken_tokenizer import TikTokenTokenizer
@@ -14,22 +14,8 @@ class TextChunker:
         self.model = model
 
 
-
     def get_text_chunks(self, text: str, doc: Document, clean_chunk: bool = True, min_nb_tokens_in_chunk: int = 1) -> List[Chunk]:
-        """
-        Splits the input text into chunks based on the specified chunk size and overlap.
-
-        Args:
-            text (str): The input text to be chunked.
-            doc (Document): The document object associated with the chunks.
-            clean_chunk (bool): Whether to clean the chunk by removing unnecessary returns.
-            min_nb_tokens_in_chunk (int): The minimum number of tokens required in a chunk.
-
-        Returns:
-            List[Chunk]: A list of Chunk objects.
-        """
-        paragraph_tokens = len(self.tokenizer.tokenize(text))
-        paragraphs = text.split('\n\n')
+        paragraphs = text.split('\n')
         chunks = []
         current_chunk = []
         current_tokens = 0
@@ -39,31 +25,102 @@ class TextChunker:
             if clean_chunk:
                 paragraph = paragraph.strip()
             paragraph_tokens = len(self.tokenizer.tokenize(paragraph))
-            if current_tokens + paragraph_tokens > self.chunk_size:
-                if current_tokens > min_nb_tokens_in_chunk:
-                    chunk_text = '\n\n'.join(current_chunk)
-                    if clean_chunk:
-                        chunk_text = TextChunker.remove_unnecessary_returns(chunk_text)
-                    chunk = Chunk(doc, b'', chunk_text, current_tokens, chunk_id=chunk_id)
-                    chunk_id += 1
-                    chunks.append(chunk)
-                if self.overlap > 0:
-                    current_chunk = current_chunk[-self.overlap:] + [paragraph]
-                else:
-                    current_chunk = [paragraph]
-                current_tokens = sum(len(self.tokenizer.tokenize(p)) for p in current_chunk)
+
+            if paragraph_tokens > self.chunk_size:
+                # Handle large paragraphs
+                sentences = self.split_into_sentences(paragraph)
+                for sentence in sentences:
+                    sentence_tokens = len(self.tokenizer.tokenize(sentence))
+                    if sentence_tokens > self.chunk_size:
+                        # Split large sentences
+                        words = sentence.split()
+                        for i in range(0, len(words), self.chunk_size):
+                            sub_sentence = ' '.join(words[i:i + self.chunk_size])
+                            sub_sentence_tokens = len(self.tokenizer.tokenize(sub_sentence))
+                            self.add_to_chunks(sub_sentence, sub_sentence_tokens, current_chunk, current_tokens, chunks, doc, clean_chunk, min_nb_tokens_in_chunk)
+                            current_chunk, current_tokens = self.reset_chunk(self.overlap)
+                            chunk_id += 1
+                    else:
+                        self.add_to_chunks(sentence, sentence_tokens, current_chunk, current_tokens, chunks, doc, clean_chunk, min_nb_tokens_in_chunk)
+                        current_chunk, current_tokens = self.reset_chunk(self.overlap)
+                        chunk_id += 1
+            elif current_tokens + paragraph_tokens > self.chunk_size:
+                # Current chunk is full, start a new one
+                self.add_to_chunks('\n\n'.join(current_chunk), current_tokens, current_chunk, current_tokens, chunks, doc, clean_chunk, min_nb_tokens_in_chunk)
+                current_chunk, current_tokens = self.reset_chunk(self.overlap)
+                chunk_id += 1
+                current_chunk.append(paragraph)
+                current_tokens += paragraph_tokens
             else:
                 current_chunk.append(paragraph)
                 current_tokens += paragraph_tokens
 
+        # Add any remaining content
         if current_chunk and current_tokens > min_nb_tokens_in_chunk:
-            chunk_text = '\n\n'.join(current_chunk)
-            if clean_chunk:
-                chunk_text = TextChunker.remove_unnecessary_returns(chunk_text)
-            chunk = Chunk(doc, b'', chunk_text, current_tokens, chunk_id)
-            chunks.append(chunk)
+            self.add_to_chunks('\n\n'.join(current_chunk), current_tokens, current_chunk, current_tokens, chunks, doc, clean_chunk, min_nb_tokens_in_chunk)
 
         return chunks
+
+    def get_text_chunks(self, text: str, doc: Document, clean_chunk: bool = True, min_nb_tokens_in_chunk: int = 1) -> List[Chunk]:
+        paragraphs = text.split('\n')
+        chunks = []
+        current_chunk = []
+        current_tokens = 0
+        chunk_id = 0
+
+        for paragraph in paragraphs:
+            if clean_chunk:
+                paragraph = paragraph.strip()
+            paragraph_tokens = len(self.tokenizer.tokenize(paragraph))
+
+            if paragraph_tokens > self.chunk_size:
+                # Handle large paragraphs
+                sentences = self.split_into_sentences(paragraph)
+                for sentence in sentences:
+                    sentence_tokens = len(self.tokenizer.tokenize(sentence))
+                    if sentence_tokens > self.chunk_size:
+                        # Split large sentences
+                        words = sentence.split()
+                        for i in range(0, len(words), self.chunk_size):
+                            sub_sentence = ' '.join(words[i:i + self.chunk_size])
+                            sub_sentence_tokens = len(self.tokenizer.tokenize(sub_sentence))
+                            self.add_to_chunks(sub_sentence, sub_sentence_tokens, current_chunk, current_tokens, chunks, doc, clean_chunk, min_nb_tokens_in_chunk)
+                            current_chunk, current_tokens = self.reset_chunk(current_chunk, self.overlap)
+                            chunk_id += 1
+                    else:
+                        self.add_to_chunks(sentence, sentence_tokens, current_chunk, current_tokens, chunks, doc, clean_chunk, min_nb_tokens_in_chunk)
+                        current_chunk, current_tokens = self.reset_chunk(current_chunk, self.overlap)
+                        chunk_id += 1
+            elif current_tokens + paragraph_tokens > self.chunk_size:
+                # Current chunk is full, start a new one
+                self.add_to_chunks('\n\n'.join(current_chunk), current_tokens, current_chunk, current_tokens, chunks, doc, clean_chunk, min_nb_tokens_in_chunk)
+                current_chunk, current_tokens = self.reset_chunk(current_chunk, self.overlap)
+                chunk_id += 1
+                current_chunk.append(paragraph)
+                current_tokens += paragraph_tokens
+            else:
+                current_chunk.append(paragraph)
+                current_tokens += paragraph_tokens
+
+        # Add any remaining content
+        if current_chunk and current_tokens > min_nb_tokens_in_chunk:
+            self.add_to_chunks('\n\n'.join(current_chunk), current_tokens, current_chunk, current_tokens, chunks, doc, clean_chunk, min_nb_tokens_in_chunk)
+
+        return chunks
+
+    def add_to_chunks(self, text: str, tokens: int, current_chunk: List[str], current_tokens: int, chunks: List[Chunk], doc: Document, clean_chunk: bool, min_nb_tokens_in_chunk: int):
+        if current_tokens > min_nb_tokens_in_chunk:
+            chunk_text = '\n\n'.join(current_chunk) if current_chunk else text
+            if clean_chunk:
+                chunk_text = self.remove_unnecessary_returns(chunk_text)
+            chunk = Chunk(doc, b'', chunk_text, current_tokens, chunk_id=len(chunks))
+            chunks.append(chunk)
+
+    def reset_chunk(self, current_chunk: List[str], overlap: int) -> Tuple[List[str], int]:
+        if overlap > 0:
+            return current_chunk[-overlap:], sum(len(self.tokenizer.tokenize(p)) for p in current_chunk[-overlap:])
+        else:
+            return [], 0
     @staticmethod
     def remove_unnecessary_returns(paragraph: str) -> str:
         """
