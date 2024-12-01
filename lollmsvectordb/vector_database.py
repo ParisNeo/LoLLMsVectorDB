@@ -113,7 +113,7 @@ class VectorDatabase:
             Manhattan Distance ('manhattan'): Also known as L1 distance or city block distance, it is the sum of the absolute differences of their coordinates.
             Chebyshev Distance ('chebyshev'): The maximum distance along any coordinate dimension.
             Minkowski Distance ('minkowski'): A generalization of Euclidean and Manhattan distances. It is defined by a parameter p, where p=1 is equivalent to Manhattan distance and p=2 is equivalent to Euclidean distance.
-            Cosine Distance ('cosine'): Measures the cosine of the angle between two vectors. It is often used for text data.
+            Cosine Similariry ('cosine'): Measures the cosine of the angle between two vectors. It is often used for text data.
             Hamming Distance ('hamming'): Measures the proportion of differing components between two binary vectors.
             Jaccard Distance ('jaccard'): Measures the dissimilarity between two sets. It is the complement of the Jaccard similarity coefficient.
             Mahalanobis Distance ('mahalanobis'): Measures the distance between a point and a distribution. It accounts for the correlations of the data set.
