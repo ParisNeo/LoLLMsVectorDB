@@ -1121,9 +1121,9 @@ class VectorDatabase:
                         results.append(chunk)
         else:
             results=[]
-            for index in indices:
-                self.chunks[index].distance=distance[index]
-                results = self.chunks[index]
+            for index in indices[0,:]:
+                self.chunks[index].distance=distances[0,index]
+                results.append(self.chunks[index])
 
         return results
 
