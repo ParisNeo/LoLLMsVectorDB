@@ -276,7 +276,9 @@ class VectorDatabase:
                 CREATE TABLE IF NOT EXISTS database_info (
                     id INTEGER PRIMARY KEY,
                     version INT NOT NULL,
-                    vectorizer_type TEXT NOT NULL
+                    vectorizer_type TEXT NOT NULL,
+                    model TEXT,
+                    parameters TEXT
                 )
             ''')
 
@@ -365,7 +367,11 @@ class VectorDatabase:
                     cursor.execute('''
                         CREATE TABLE IF NOT EXISTS database_info (
                             id INTEGER PRIMARY KEY,
-                            version INT NOT NULL
+                            version INT NOT NULL,
+                            vectorizer_type TEXT NOT NULL,
+                            model TEXT,
+                            parameters TEXT
+                                   
                         )
                     ''')
                     cursor.execute('SELECT version FROM database_info WHERE id = 1')
@@ -703,6 +709,39 @@ class VectorDatabase:
             except:
                 ASCIIColors.error("Document Not found!")
 
+
+    def remove_document_by_id(self, doc_id: int):
+        """
+        Removes a document and its chunks from the database using the document ID.
+
+        Parameters:
+        -----------
+        doc_id : int
+            The ID of the document to be removed.
+        """
+        if self.db_path:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                # Delete chunks associated with the document
+                cursor.execute('''
+                    DELETE FROM chunks WHERE document_id = ?
+                ''', (doc_id,))
+                # Delete the document itself
+                cursor.execute('''
+                    DELETE FROM documents WHERE id = ?
+                ''', (doc_id,))
+                conn.commit()
+        else:
+            # Remove document from in-memory storage
+            try:
+                doc = [d for d in self.documents if d.id == doc_id][0]
+                self.documents = [d for d in self.documents if d.id != doc_id]
+                self.chunks = [c for c in self.chunks if c.doc != doc]
+                print(f"Document with ID '{doc_id}' removed from in-memory storage.")
+            except IndexError:
+                ASCIIColors.error("Document Not found!")
+
+
     def verify_document(self, text: str) -> bool:
         """
         Verifies if a document exists in the database by its hash.
@@ -733,36 +772,72 @@ class VectorDatabase:
         Loads vectors and their text from the database into memory.
         """
         if self.db_path!="":
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    SELECT vectorizer_type
-                    FROM database_info 
-                ''')
-                rows = cursor.fetchall()     
-                if rows[0][0]==self.vectorizer.name:       
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
                     cursor.execute('''
-                        SELECT chunks.vector, chunks.chunk_id
-                        FROM chunks 
+                        SELECT vectorizer_type
+                        FROM database_info 
                     ''')
-                    rows = cursor.fetchall()
-                    if len(rows)>0 and rows[0] and len(rows[0])>1 and rows[0][0]:
-                        self.vectors = [np.frombuffer(row[0], dtype=np.float32) for row in rows]
-                        self.chunk_ids = [row[1] for row in rows]
+                    rows = cursor.fetchall()     
+                    if rows[0][0]==self.vectorizer.name:       
+                        cursor.execute('''
+                            SELECT chunks.vector, chunks.chunk_id
+                            FROM chunks 
+                        ''')
+                        rows = cursor.fetchall()
+                        if len(rows)>0 and rows[0] and len(rows[0])>1 and rows[0][0]:
+                            self.vectors = [np.frombuffer(row[0], dtype=np.float32) for row in rows]
+                            self.chunk_ids = [row[1] for row in rows]
+                        else:
+                            self.vectors = []
+                            self.chunk_ids = []
+                            ASCIIColors.error("No vectors found in database")
                     else:
-                        self.vectors = []
-                        self.chunk_ids = []
-                        ASCIIColors.error("No vectors found in database")
-                else:
-                    ASCIIColors.error("Vectorizer not compatible with the content")
-                    self._update_vectors(True)
-                    cursor.execute('''
-                        UPDATE database_info
-                        SET vectorizer_type = ?, model = ?, parameters = ?
-                    ''', (self.vectorizer.name,self.vectorizer.parameters["model_name"],self.vectorizer.parameters))
+                        ASCIIColors.error("Vectorizer not compatible with the content")
+                        self._update_vectors(True)
+                        try:
+                            parameters = json.dumps(self.vectorizer.parameters)
+                            cursor.execute('''
+                                UPDATE database_info
+                                SET vectorizer_type = ?, model = ?, parameters = ?
+                            ''', (self.vectorizer.name,self.vectorizer.parameters["model_name"],parameters))
+                        except Exception as ex:
+                            trace_exception(ex)
+                            try:
+                                # First, let's get the current columns in the table
+                                cursor.execute("PRAGMA table_info(database_info)")
+                                columns = [column[1] for column in cursor.fetchall()]
+                                # Define the columns we need
+                                required_columns = {
+                                    'vectorizer_type': 'TEXT',
+                                    'model': 'TEXT',
+                                    'parameters': 'TEXT'
+                                }
+                                
+                                # Add any missing columns
+                                for column_name, column_type in required_columns.items():
+                                    if column_name not in columns:
+                                        try:
+                                            cursor.execute(f'''
+                                                ALTER TABLE database_info
+                                                ADD COLUMN {column_name} {column_type}
+                                            ''')
+                                        except Exception as e:
+                                            print(f"Error adding column {column_name}: {str(e)}")                            
+                                parameters = json.dumps(self.vectorizer.parameters)
+                                cursor.execute('''
+                                    UPDATE database_info
+                                    SET vectorizer_type = ?, model = ?, parameters = ?
+                                ''', (self.vectorizer.name,self.vectorizer.parameters["model_name"],parameters))
+                            except Exception as ex:
+                                trace_exception(ex)
 
-                    # Commit the changes
-                    conn.commit()
+                        # Commit the changes
+                        conn.commit()
+            except Exception as ex:
+                trace_exception(ex)
+
         else:
             ASCIIColors.error("Can't load vectors from database if you don't specify a file path")
 
@@ -901,7 +976,7 @@ class VectorDatabase:
                 result = cursor.fetchone()
                 if result:
                     first_id = result[0]
-                    cursor.execute('UPDATE vectorizer_info SET name = ? model=? WHERE id = ?', (self.vectorizer.name, self.vectorizer.parameters["model_name"], first_id))
+                    cursor.execute('UPDATE vectorizer_info SET name = ?, model = ? WHERE id = ?', (self.vectorizer.name, self.vectorizer.parameters["model_name"], first_id))
                     if self.vectorizer.parameters:
                         vectorizer_parameters = json.dumps(self.vectorizer.parameters)
                         cursor.execute('UPDATE vectorizer_info SET parameters = ? WHERE id = ?', (vectorizer_parameters, first_id))
@@ -1045,7 +1120,10 @@ class VectorDatabase:
                         chunk = Chunk(doc, self.vectors[index], result[3], result[4], distance=distance, chunk_id=result[5])
                         results.append(chunk)
         else:
-            results = [c for c in self.chunks if c.chunk_id in indices and c.chunk_id not in exclude_chunk_ids]
+            results=[]
+            for index in indices:
+                self.chunks[index].distance=distance[index]
+                results = self.chunks[index]
 
         return results
 
