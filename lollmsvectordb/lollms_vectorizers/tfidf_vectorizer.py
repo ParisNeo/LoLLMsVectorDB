@@ -19,6 +19,9 @@ class TFIDFVectorizer(Vectorizer):
         Initialize the TFIDFVectorizer with the name.
         """
         super().__init__("TFIDFVectorizer", True)
+        self.parameters = {
+            "model_name": ""
+        }
         self.vocab = {}
         self.idf = {}
         self.fitted = False

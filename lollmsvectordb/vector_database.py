@@ -530,6 +530,7 @@ class VectorDatabase:
                     ASCIIColors.multicolor(["lollmsVectorDB> ","Preprocessing chunks is active"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
 
                 chunks:List[Chunk]= self.textChunker.get_text_chunks(text, doc, min_nb_tokens_in_chunk=min_nb_tokens_in_chunk)
+                self.chunks = chunks
 
                 for chunk in tqdm(chunks):
                     if not self.vectorizer.requires_fitting or self.vectorizer.model is not None:
@@ -739,7 +740,7 @@ class VectorDatabase:
                     FROM database_info 
                 ''')
                 rows = cursor.fetchall()     
-                if rows[0]==self.vectorizer.name:       
+                if rows[0][0]==self.vectorizer.name:       
                     cursor.execute('''
                         SELECT chunks.vector, chunks.chunk_id
                         FROM chunks 
@@ -757,8 +758,8 @@ class VectorDatabase:
                     self._update_vectors(True)
                     cursor.execute('''
                         UPDATE database_info
-                        SET vectorizer_type = ?
-                    ''', (self.vectorizer.name,))
+                        SET vectorizer_type = ?, model = ?, parameters = ?
+                    ''', (self.vectorizer.name,self.vectorizer.parameters["model_name"],self.vectorizer.parameters))
 
                     # Commit the changes
                     conn.commit()
@@ -900,17 +901,15 @@ class VectorDatabase:
                 result = cursor.fetchone()
                 if result:
                     first_id = result[0]
-                    cursor.execute('UPDATE vectorizer_info SET name = ? WHERE id = ?', (self.vectorizer.name, first_id))
-                    if self.vectorizer.model:
-                        model_blob = pickle.dumps(self.vectorizer.model)
-                        cursor.execute('UPDATE vectorizer_info SET model = ? WHERE id = ?', (model_blob, first_id))
+                    cursor.execute('UPDATE vectorizer_info SET name = ? model=? WHERE id = ?', (self.vectorizer.name, self.vectorizer.parameters["model_name"], first_id))
                     if self.vectorizer.parameters:
                         vectorizer_parameters = json.dumps(self.vectorizer.parameters)
                         cursor.execute('UPDATE vectorizer_info SET parameters = ? WHERE id = ?', (vectorizer_parameters, first_id))
                     conn.commit()
                     return True
                 else:
-                    cursor.execute('INSERT INTO vectorizer_info (name) VALUES (?)', (self.vectorizer.name,))
+                    vectorizer_parameters = json.dumps(self.vectorizer.parameters)
+                    cursor.execute('INSERT INTO vectorizer_info (name,model,parameters) VALUES (?,?,?)', (self.vectorizer.name, self.vectorizer.parameters["model_name"], vectorizer_parameters))
                 return False
         else:
             return
@@ -971,6 +970,11 @@ class VectorDatabase:
             if document.path == target_path:
                 return document
         return None
+
+    def text2Chunk(self, text:str, document_title="", document_hash="", document_path="", document_id=0, nb_tokens=0, chunk_id=0, chunk_distance=0):
+        query_vector = self.vectorizer.vectorize([text])[0]
+        return Chunk(Document(document_hash, document_title, document_path, document_id),query_vector, text, nb_tokens, chunk_id, chunk_distance)
+
 
     def search(self, query_data: str, n_results: int = 5, exclude_chunk_ids: List[int] = []) -> List[Chunk]:
         """
@@ -1045,6 +1049,51 @@ class VectorDatabase:
 
         return results
 
+    def load_all_data(self):
+        """
+        Loads all documents and chunks from the database and stores them in self.documents and self.chunks.
+        Should be called after initialization of the database if you want to work with the data in memory.
+        """
+        self.documents = []
+        self.chunks = []
+        
+        if self.db_path != "":
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # First load all documents
+                cursor.execute('''
+                    SELECT id, hash, title, path
+                    FROM documents
+                ''')
+                doc_results = cursor.fetchall()
+                
+                # Create Document objects and store them
+                for doc_id, doc_hash, title, path in doc_results:
+                    document = Document(doc_hash, title, path, doc_id)
+                    self.documents.append(document)
+                
+                # Then load all chunks with their corresponding document information
+                cursor.execute('''
+                    SELECT c.vector, c.text, c.nb_tokens, c.chunk_id, c.document_id
+                    FROM chunks c
+                    JOIN documents d ON c.document_id = d.id
+                ''')
+                chunk_results = cursor.fetchall()
+                
+                # Create Chunk objects and store them
+                for vector, text, nb_tokens, chunk_id, doc_id in chunk_results:
+                    # Find the corresponding document
+                    doc = next((d for d in self.documents if d.id == doc_id), None)
+                    if doc:
+                        vector = np.frombuffer(vector, dtype=np.float32)
+                        chunk = Chunk(doc, vector, text, nb_tokens, chunk_id=chunk_id)
+                        self.chunks.append(chunk)
+        else:
+            # If no database path is provided, the vectors and chunks should already be in memory
+            pass
+
+        return self.documents, self.chunks
 
     def remove_vectors_by_meta_prefix(self, meta_prefix: str):
         """
@@ -1116,6 +1165,146 @@ class VectorDatabase:
             conn.commit()
         return True
 
+    def plot_vector_distribution(self, chunks_lists: List[List[Chunk]], figsize=(12, 8), label_length=30, show=True, 
+                            colors=None, group_names=None, sizes=None, markers=None):
+        """
+        Plots the distribution of vectors in 2D space using PCA dimensionality reduction.
+        Each list of chunks will be plotted with a different color, size, and marker.
+        
+        Parameters:
+        -----------
+        chunks_lists : List[List[Chunk]]
+            A list containing multiple lists of Chunk objects
+        figsize : tuple, optional (default=(12, 8))
+            Size of the figure (width, height)
+        label_length : int, optional (default=30)
+            Number of characters to show in the text labels
+        show : bool, optional (default=True)
+            If True, displays the plot immediately using plt.show()
+            If False, returns the plt object for further customization
+        colors : List[str], optional (default=None)
+            List of colors to use for different chunk lists. If None, uses default color cycle
+        group_names : List[str], optional (default=None)
+            List of names for each group to be shown in the legend. If None, uses default 'Group X' naming
+        sizes : List[float], optional (default=None)
+            List of scatter point sizes for each group. If None, uses default size of 50
+        markers : List[str], optional (default=None)
+            List of markers for each group. If None, uses 'o' for all groups
+            Common markers: 'o', 's', '^', 'v', '<', '>', 'D', 'p', '*', 'h', 'H', '+', 'x'
+            
+        Returns:
+        --------
+        plt : matplotlib.pyplot
+            The plot object for further customization if show=False
+        None
+            If show=True, returns None after displaying the plot
+        """
+        import numpy as np
+        from sklearn.decomposition import PCA
+        import matplotlib.pyplot as plt
+        
+        num_groups = len(chunks_lists)
+        
+        # If colors not provided, use default color cycle
+        if colors is None:
+            colors = plt.cm.tab10(np.linspace(0, 1, num_groups))
+        
+        # If group_names not provided, use default naming
+        if group_names is None:
+            group_names = [f'Group {i + 1}' for i in range(num_groups)]
+        elif len(group_names) != num_groups:
+            raise ValueError("Number of group names must match number of chunk lists")
+        
+        # If sizes not provided, use default size
+        if sizes is None:
+            sizes = [50] * num_groups
+        elif len(sizes) != num_groups:
+            raise ValueError("Number of sizes must match number of chunk lists")
+        
+        # If markers not provided, use default marker
+        if markers is None:
+            markers = ['o'] * num_groups
+        elif len(markers) != num_groups:
+            raise ValueError("Number of markers must match number of chunk lists")
+        
+        # Get all vectors and texts from all chunks lists
+        all_vectors = []
+        all_texts = []
+        group_indices = []  # To keep track of which group each vector belongs to
+        
+        for group_idx, chunks in enumerate(chunks_lists):
+            for chunk in chunks:
+                all_vectors.append(chunk.vector)
+                all_texts.append(chunk.text[:label_length] + "...")
+                group_indices.append(group_idx)
+        
+        # Check if we have any vectors
+        if not all_vectors:
+            raise ValueError("No vectors available to plot. Make sure you have added documents to the database.")
+        
+        # Convert to numpy array and ensure proper shape
+        all_vectors = np.array(all_vectors)
+        
+        # If vectors is 1D, reshape it
+        if len(all_vectors.shape) == 1:
+            all_vectors = all_vectors.reshape(-1, 1)
+        
+        # Check if we have enough dimensions for PCA
+        n_components = min(2, all_vectors.shape[1]) if len(all_vectors.shape) > 1 else 1
+        
+        # Reduce dimensionality to 2D using PCA
+        pca = PCA(n_components=n_components)
+        
+        try:
+            vectors_2d = pca.fit_transform(all_vectors)
+            
+            # If we only got 1 component, add a zero column
+            if vectors_2d.shape[1] < 2:
+                vectors_2d = np.column_stack((vectors_2d, np.zeros(vectors_2d.shape[0])))
+            
+            # Create the plot
+            plt.figure(figsize=figsize)
+            
+            # Plot points for each group with different colors, sizes, and markers
+            for group_idx in range(num_groups):
+                group_mask = np.array(group_indices) == group_idx
+                group_vectors = vectors_2d[group_mask]
+                group_texts = np.array(all_texts)[group_mask]
+                
+                scatter = plt.scatter(group_vectors[:, 0], group_vectors[:, 1], 
+                                    c=[colors[group_idx]], alpha=0.6,
+                                    s=sizes[group_idx],  # Set size for this group
+                                    marker=markers[group_idx],  # Set marker for this group
+                                    label=group_names[group_idx])
+                
+                # Add labels for each point in this group
+                for i, txt in enumerate(group_texts):
+                    plt.annotate(txt, (group_vectors[i, 0], group_vectors[i, 1]), 
+                                xytext=(5, 5), textcoords='offset points',
+                                fontsize=8, alpha=0.7)
+            
+            plt.title('Distribution of Document Vectors in 2D Space')
+            plt.xlabel('First Principal Component')
+            plt.ylabel('Second Principal Component')
+            plt.legend()
+            
+            # Add a grid
+            plt.grid(True, alpha=0.3)
+            
+            # Make the plot look nicer
+            plt.tight_layout()
+            
+            if show:
+                plt.show()
+                return None
+            return plt
+        
+        except Exception as e:
+            raise ValueError(f"Error during plotting: {str(e)}\nShape of vectors: {all_vectors.shape}")
+
+
+
+
 # Example usage
 if __name__ == "__main__":
     # Example with TFIDFVectorizer
@@ -1123,16 +1312,41 @@ if __name__ == "__main__":
     from lollmsvectordb.lollms_vectorizers.semantic_vectorizer import SemanticVectorizer
 
     
-    db = VectorDatabase("vector_db.sqlite", TFIDFVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) # 
+    #db = VectorDatabase("vector_db.sqlite", TFIDFVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) # 
+    
+    db = VectorDatabase("vector_db.sqlite", SemanticVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) # 
 
     # Add multiple documents to the database
     documents = [
-        ("Document 1", "This is the first sample text."),
-        ("Document 2", "Here is another example of a sample text."),
-        ("Document 3", "This document is different from the others."),
-        ("Document 4", "Yet another document with some sample text."),
-        ("Document 5", "This is the fifth document in the database."),
-        ("Document 6", "Finally, this is the sixth sample text. welcome to the moon")
+        # Cuba visit related documents
+        ("Document 1", "President Biden visited Cuba in a historic diplomatic mission."),
+        ("Document 2", "The president of United States made a groundbreaking trip to Cuba in 2024."),
+        ("Document 3", "Pope Francis visited Cuba in 2015 to strengthen Catholic-Cuban relations."),
+        ("Document 4", "Ernest Hemingway frequently visited Cuba and lived there for many years."),
+        ("Document 5", "Barack Obama visited Cuba in 2016, marking the first US presidential visit in 88 years."),
+        
+        # Completely different topics
+        ("Document 6", "Scientists discovered a new species of butterfly in the Amazon rainforest."),
+        ("Document 7", "The latest smartphones feature advanced artificial intelligence capabilities."),
+        ("Document 8", "Global warming is causing significant changes in polar ice caps."),
+        ("Document 9", "The Renaissance period marked a cultural rebirth in European history."),
+        ("Document 10", "Traditional Japanese tea ceremonies follow strict protocols and rituals."),
+        
+        # More Cuba-related documents
+        ("Document 11", "Che Guevara and Fidel Castro led the Cuban Revolution in 1959."),
+        ("Document 12", "Russian Premier Nikita Khrushchev visited Cuba during the Cold War."),
+        
+        # More diverse topics
+        ("Document 13", "The Great Wall of China stretches over 13,000 miles."),
+        ("Document 14", "Electric vehicles are becoming increasingly popular worldwide."),
+        ("Document 15", "Ancient Egyptians built the pyramids as tombs for their pharaohs."),
+        ("Document 16", "The human genome contains approximately 3 billion base pairs."),
+        ("Document 17", "Vincent van Gogh painted The Starry Night in 1889."),
+        
+        # Additional Cuba visitors
+        ("Document 18", "Jimmy Carter visited Cuba in 2002 to discuss human rights."),
+        ("Document 19", "The Rolling Stones performed a historic concert in Cuba in 2016."),
+        ("Document 20", "Canadian Prime Minister Justin Trudeau visited Cuba to maintain diplomatic ties.")
     ]
 
     for title, text in documents:
@@ -1142,8 +1356,11 @@ if __name__ == "__main__":
     db.build_index()
 
     # Perform a search query
-    query = "what is the sixth sample text."
-    results:List[Chunk] = db.search(query, n_results=3)
+    query = "who visited cuba?"
+    results:List[Chunk] = db.search(query, n_results=5)
+    db.load_all_data()
+    db.plot_vector_distribution([db.chunks,[db.text2Chunk(query)], results], group_names=["chunks","query", "selected"], colors=['green','red', "blue"], markers=['o','o','x'], sizes=[50,50,150])
+
 
     # Print the search results
     for chunk in results:

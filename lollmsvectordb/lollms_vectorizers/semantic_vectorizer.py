@@ -52,16 +52,14 @@ class SemanticVectorizer(Vectorizer):
     _model_cache = {}
     _model_ref_count = {}
 
-    def __init__(self, model_name: str = 'bert-base-uncased'):
+    def __init__(self, model_name: str = 'BAAI/bge-m3'):
         """
-        Initializes the SemanticVectorizer with a specified BERT model.
+        Initializes the SemanticVectorizer with a specified model.
 
         Args:
-            model_name (str): The name of the pre-trained BERT model to use.
+            model_name (str): The name of the pre-trained model to use.
         """
         super().__init__("SemanticVectorizer")
-        if model_name=="bert-base-nli-mean-tokens":
-            model_name = "sentence-transformers/bert-base-nli-mean-tokens"
         ASCIIColors.multicolor(["LollmsVectorDB>", f"Loading Pretrained Semantic model {model_name} ..."], [ASCIIColors.color_red, ASCIIColors.color_cyan], end="", flush=True)
         self.parameters = {
             "model_name": model_name
@@ -143,19 +141,7 @@ class SemanticVectorizer(Vectorizer):
         """
         return [
             "gpt2",
-            "bert-base-uncased",
-            "bert-base-multilingual-uncased",
-            "bert-large-uncased",
-            "bert-large-uncased-whole-word-masking-finetuned-squad",
-            "distilbert-base-uncased",
-            "roberta-base",
-            "roberta-large",
-            "xlm-roberta-base",
-            "xlm-roberta-large",
-            "albert-base-v2",
-            "albert-large-v2",
-            "albert-xlarge-v2",
-            "albert-xxlarge-v2",
+            "BAAI/bge-m3",
             "sentence-transformers/all-MiniLM-L6-v2",
             "sentence-transformers/all-MiniLM-L12-v2",
             "sentence-transformers/all-distilroberta-v1",

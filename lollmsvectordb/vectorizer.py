@@ -20,6 +20,7 @@ class Vectorizer(ABC):
         """
         super().__init__()
         self.name = name
+        self.model_name = ""
         self.model = None
         self.parameters = None
         self.fitted = False
