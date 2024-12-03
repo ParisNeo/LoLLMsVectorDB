@@ -60,6 +60,56 @@ class TextChunker:
             self.add_to_chunks('\n\n'.join(current_chunk), current_tokens, current_chunk, current_tokens, chunks, doc, clean_chunk, min_nb_tokens_in_chunk)
 
         return chunks
+    def split_into_sentences(self, paragraph):
+        """
+        Split a paragraph into sentences.
+        
+        Args:
+            paragraph (str): The text to be split into sentences
+            
+        Returns:
+            list: A list of sentences
+        """
+        if not paragraph:
+            return []
+        
+        import re
+        
+        # Define abbreviations to avoid false splits
+        abbreviations = r'(?:[A-Za-z]\.){2,}|Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.|Sr\.|Jr\.|etc\.'
+        
+        # Define sentence endings
+        sentence_endings = r'[.!?]+'
+        
+        # Define quotes and parentheses
+        quotes_parentheses = r'["\'\(\)\[\]\{\}]'
+        
+        # Split the paragraph into sentences
+        # First, replace abbreviations with a placeholder to avoid false splits
+        text = paragraph
+        abbrev_matches = re.finditer(abbreviations, text)
+        placeholders = {}
+        for i, match in enumerate(abbrev_matches):
+            placeholder = f'ABBREV_{i}'
+            placeholders[placeholder] = match.group()
+            text = text.replace(match.group(), placeholder)
+        
+        # Split on sentence endings followed by spaces and capital letters
+        pattern = f'({sentence_endings}+)\\s+(?=[A-Z]|{quotes_parentheses}\\s*[A-Z])'
+        sentences = re.split(pattern, text)
+        
+        # Rejoin sentence endings with their sentences
+        sentences = [''.join(pair) for pair in zip(sentences[::2], sentences[1::2] + [''])]
+        
+        # Remove empty strings and whitespace
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        # Restore abbreviations
+        for sentence in sentences:
+            for placeholder, abbrev in placeholders.items():
+                sentence = sentence.replace(placeholder, abbrev)
+        
+        return sentences
 
     def get_text_chunks(self, text: str, doc: Document, clean_chunk: bool = True, min_nb_tokens_in_chunk: int = 1) -> List[Chunk]:
         paragraphs = text.split('\n')
