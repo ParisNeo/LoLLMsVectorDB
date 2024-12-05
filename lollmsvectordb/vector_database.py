@@ -1121,10 +1121,9 @@ class VectorDatabase:
                         results.append(chunk)
         else:
             results=[]
-            for index in indices[0,:]:
-                self.chunks[index].distance=distances[0,index]
+            for index in range(len(indices[0,:])):
+                self.chunks[indices[0,index]].distance=distances[0,index]
                 results.append(self.chunks[index])
-
         return results
 
     def load_all_data(self):
