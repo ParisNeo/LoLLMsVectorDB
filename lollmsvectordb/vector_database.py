@@ -540,7 +540,7 @@ class VectorDatabase:
 
                 for chunk in tqdm(chunks):
                     if not self.vectorizer.requires_fitting or self.vectorizer.model is not None:
-                        vector = self.vectorizer.vectorize([chunk.text])[0]
+                        vector = self.vectorizer.vectorize([chunk.text])[0].astype("float32")
                         vector_blob = np.array(vector).tobytes()
                         cursor.execute('''
                             INSERT INTO chunks (document_id, vector, text, nb_tokens, chunk_id) VALUES (?, ?, ?, ?, ?)
@@ -859,7 +859,7 @@ class VectorDatabase:
                     for row in tqdm(rows):
                         chunk_id, text, vector = row
                         if vector is None or revectorize:
-                            vector = np.array(self.vectorizer.vectorize([text])[0])
+                            vector = np.array(self.vectorizer.vectorize([text])[0]).astype("float32")
                             self.vectors.append(vector)
                             self.chunk_ids.append(chunk_id)
                             vector_blob = vector.tobytes()
@@ -1387,11 +1387,12 @@ if __name__ == "__main__":
     # Example with TFIDFVectorizer
     from lollmsvectordb import TFIDFVectorizer
     from lollmsvectordb.lollms_vectorizers.semantic_vectorizer import SemanticVectorizer
+    from lollmsvectordb.lollms_vectorizers.ollama_vectorizer import OllamaVectorizer
 
     
     #db = VectorDatabase("vector_db.sqlite", TFIDFVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) # 
     
-    db = VectorDatabase("vector_db.sqlite", SemanticVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) # 
+    db = VectorDatabase("vector_db.sqlite", OllamaVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) # 
 
     # Add multiple documents to the database
     documents = [
