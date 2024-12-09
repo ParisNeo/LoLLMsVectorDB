@@ -1243,7 +1243,7 @@ class VectorDatabase:
         return True
 
     def plot_vector_distribution(self, chunks_lists: List[List[Chunk]], figsize=(12, 8), label_length=30, show=True, 
-                            colors=None, group_names=None, sizes=None, markers=None):
+                                colors=None, group_names=None, sizes=None, markers=None, show_labels=True):
         """
         Plots the distribution of vectors in 2D space using PCA dimensionality reduction.
         Each list of chunks will be plotted with a different color, size, and marker.
@@ -1268,18 +1268,28 @@ class VectorDatabase:
         markers : List[str], optional (default=None)
             List of markers for each group. If None, uses 'o' for all groups
             Common markers: 'o', 's', '^', 'v', '<', '>', 'D', 'p', '*', 'h', 'H', '+', 'x'
-            
+        show_labels : bool, optional (default=True)
+            If True, displays text labels next to points. If False, hides labels.
+        
         Returns:
         --------
-        plt : matplotlib.pyplot
-            The plot object for further customization if show=False
+        fig, ax : tuple
+            The figure and axis objects for further customization if show=False
         None
             If show=True, returns None after displaying the plot
         """
         import numpy as np
+        import pipmaster as pm
+        if not pm.is_installed("scikit-learn"):
+            pm.install("scikit-learn")
+        if not pm.is_installed("matplotlib"):
+            pm.install("matplotlib")
+        if not pm.is_installed("mplcursors"):
+            pm.install("mplcursors")
         from sklearn.decomposition import PCA
         import matplotlib.pyplot as plt
-        
+        from mplcursors import cursor
+        from typing import List
         num_groups = len(chunks_lists)
         
         # If colors not provided, use default color cycle
@@ -1340,7 +1350,9 @@ class VectorDatabase:
                 vectors_2d = np.column_stack((vectors_2d, np.zeros(vectors_2d.shape[0])))
             
             # Create the plot
-            plt.figure(figsize=figsize)
+            fig, ax = plt.subplots(figsize=figsize)
+            
+            scatter_objects = []
             
             # Plot points for each group with different colors, sizes, and markers
             for group_idx in range(num_groups):
@@ -1348,38 +1360,46 @@ class VectorDatabase:
                 group_vectors = vectors_2d[group_mask]
                 group_texts = np.array(all_texts)[group_mask]
                 
-                scatter = plt.scatter(group_vectors[:, 0], group_vectors[:, 1], 
+                scatter = ax.scatter(group_vectors[:, 0], group_vectors[:, 1], 
                                     c=[colors[group_idx]], alpha=0.6,
-                                    s=sizes[group_idx],  # Set size for this group
-                                    marker=markers[group_idx],  # Set marker for this group
+                                    s=sizes[group_idx],
+                                    marker=markers[group_idx],
                                     label=group_names[group_idx])
                 
-                # Add labels for each point in this group
-                for i, txt in enumerate(group_texts):
-                    plt.annotate(txt, (group_vectors[i, 0], group_vectors[i, 1]), 
-                                xytext=(5, 5), textcoords='offset points',
-                                fontsize=8, alpha=0.7)
+                scatter_objects.append(scatter)
+                
+                if show_labels:
+                    for i, txt in enumerate(group_texts):
+                        ax.annotate(txt, (group_vectors[i, 0], group_vectors[i, 1]), 
+                                    xytext=(5, 5), textcoords='offset points',
+                                    fontsize=8, alpha=0.7)
             
-            plt.title('Distribution of Document Vectors in 2D Space')
-            plt.xlabel('First Principal Component')
-            plt.ylabel('Second Principal Component')
-            plt.legend()
+            ax.set_title('Distribution of Document Vectors in 2D Space')
+            ax.set_xlabel('First Principal Component')
+            ax.set_ylabel('Second Principal Component')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
             
-            # Add a grid
-            plt.grid(True, alpha=0.3)
-            
-            # Make the plot look nicer
             plt.tight_layout()
+            
+            # Add hover functionality
+            def on_hover(sel):
+                index = sel.index
+                group_idx = group_indices[index]
+                full_text = chunks_lists[group_idx][index % len(chunks_lists[group_idx])].text
+                sel.annotation.set_text(f"Group: {group_names[group_idx]}\nFull text: {full_text}")
+                sel.annotation.get_bbox_patch().set(fc="white", alpha=0.8)
+            
+            cursor_obj = cursor(scatter_objects, hover=True)
+            cursor_obj.connect("add", on_hover)
             
             if show:
                 plt.show()
                 return None
-            return plt
+            return fig, ax
         
         except Exception as e:
             raise ValueError(f"Error during plotting: {str(e)}\nShape of vectors: {all_vectors.shape}")
-
-
 
 
 # Example usage

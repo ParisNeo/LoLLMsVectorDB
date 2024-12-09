@@ -15,25 +15,20 @@ import json
 import requests
 
 class OllamaVectorizer(Vectorizer):
-    def __init__(self, model_name: str = 'bge-m3', host: str = 'localhost', port: int = 11434):
+    def __init__(self, model_name: str = 'bge-m3', url: str = 'http://localhost:11434'):
         """
         Initializes the OllamaVectorizer with a specified Ollama model and server details.
 
         Args:
             model_name (str): The name of the Ollama model to use for embeddings. Default is 'bge-m3'.
-            host (str): The host address of the Ollama server.
-            port (int): The port number of the Ollama server.
+            url (str): The host url of the Ollama server.
         """
         super().__init__("OllamaVectorizer")
         self.model_name = model_name
-        self.host = host
-        self.port = port
-        self.base_url = f"http://{self.host}:{self.port}/api/embed"
+        self.base_url = f"{url}/api/embed"
 
         self.parameters = {
             "model_name": self.model_name,
-            "host": self.host,
-            "port": self.port
         }
         ASCIIColors.multicolor(["LollmsVectorDB>", f"Using Ollama model {model_name} for embeddings."], [ASCIIColors.color_red, ASCIIColors.color_cyan], end="", flush=True)
         ASCIIColors.success("OK")
@@ -94,7 +89,7 @@ class OllamaVectorizer(Vectorizer):
         ]
 
     def __str__(self):
-        return f'Lollms Vector DB OllamaVectorizer. Using model {self.model_name} at {self.host}:{self.port}.'
+        return f'Lollms Vector DB OllamaVectorizer. Using model {self.model_name} at {self.base_url}.'
 
     def __repr__(self):
-        return f'Lollms Vector DB OllamaVectorizer. Using model {self.model_name} at {self.host}:{self.port}.'
+        return f'Lollms Vector DB OllamaVectorizer. Using model {self.model_name} at {self.base_url}.'
