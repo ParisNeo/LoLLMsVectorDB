@@ -52,7 +52,7 @@ class SemanticVectorizer(Vectorizer):
     _model_cache = {}
     _model_ref_count = {}
 
-    def __init__(self, model_name: str = 'BAAI/bge-m3', trust_remote_code=True):
+    def __init__(self, model_name: str = 'BAAI/bge-m3', trust_remote_code=False):
         """
         Initializes the SemanticVectorizer with a specified model.
 
