@@ -52,7 +52,7 @@ class SemanticVectorizer(Vectorizer):
     _model_cache = {}
     _model_ref_count = {}
 
-    def __init__(self, model_name: str = 'BAAI/bge-m3'):
+    def __init__(self, model_name: str = 'BAAI/bge-m3', trust_remote_code=True):
         """
         Initializes the SemanticVectorizer with a specified model.
 
@@ -75,7 +75,7 @@ class SemanticVectorizer(Vectorizer):
             try:
                 AutoTokenizer, AutoModel = import_modules()
                 self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-                self.model_ = AutoModel.from_pretrained(model_name)
+                self.model_ = AutoModel.from_pretrained(model_name, trust_remote_code=trust_remote_code)
                 SemanticVectorizer._model_cache[model_name] = (self.tokenizer, self.model_)
                 SemanticVectorizer._model_ref_count[model_name] = 1
                 ASCIIColors.success("OK")
@@ -83,7 +83,8 @@ class SemanticVectorizer(Vectorizer):
                 ASCIIColors.multicolor(["LollmsVectorDB>", f" Parameters:"], [ASCIIColors.color_red, ASCIIColors.color_bright_green])
                 ASCIIColors.yellow(json.dumps(self.parameters, indent=4))
                 self.fitted = True
-            except:
+            except Exception as ex:
+                trace_exception(ex)
                 self.tokenizer = None
                 self.model_ = None
                 self.fitted = False
