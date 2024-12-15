@@ -168,7 +168,7 @@ class VectorDatabase:
         self.new_data=False
         
     def __del__(self):
-        print("deleted Vector database")
+        pass
 
     def _create_tables(self, reset: bool = False):
         """
