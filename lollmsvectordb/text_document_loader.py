@@ -1,11 +1,13 @@
+import re
 from pathlib import Path
 from typing import List
-import re
+
 import pipmaster as pm
- 
+
+
 class TextDocumentsLoader:
     @staticmethod
-    def read_file(file_path: Path|str) -> str:
+    def read_file(file_path: Path | str) -> str:
         """
         Read a file and return its content as a string.
 
@@ -14,13 +16,13 @@ class TextDocumentsLoader:
 
         Returns:
             str: The content of the file.
-        
+
         Raises:
             ValueError: If the file type is unknown.
         """
         file_path = Path(file_path)
-        
-        if file_path.suffix.lower() ==".pdf":
+
+        if file_path.suffix.lower() == ".pdf":
             return TextDocumentsLoader.read_pdf_file(file_path)
         elif file_path.suffix.lower() == ".docx":
             return TextDocumentsLoader.read_docx_file(file_path)
@@ -34,13 +36,56 @@ class TextDocumentsLoader:
             return TextDocumentsLoader.read_pptx_file(file_path)
         elif file_path.suffix.lower() in [".pcap"]:
             return TextDocumentsLoader.read_pcap_file(file_path)
-        elif file_path.suffix.lower() in ['.sh', '.json', '.sym', '.log', '.snippet', '.se', '.yml', '.snippets', '.lua', '.pdf', '.md', '.docx', '.yaml', '.inc', '.txt', '.ini', '.pas', '.pptx', '.map', '.php', '.xlsx', '.rtf', '.hpp', '.h', '.asm', '.xml', '.hh', '.sql', '.java', '.c', '.html', '.inf', '.rb', '.py', '.cs', '.js', '.bat', '.css', '.s', '.cpp', '.csv', '.vue']:
+        elif file_path.suffix.lower() in [
+            ".sh",
+            ".json",
+            ".sym",
+            ".log",
+            ".snippet",
+            ".se",
+            ".yml",
+            ".snippets",
+            ".lua",
+            ".pdf",
+            ".md",
+            ".docx",
+            ".yaml",
+            ".inc",
+            ".txt",
+            ".ini",
+            ".pas",
+            ".pptx",
+            ".map",
+            ".php",
+            ".xlsx",
+            ".rtf",
+            ".hpp",
+            ".h",
+            ".asm",
+            ".xml",
+            ".hh",
+            ".sql",
+            ".java",
+            ".c",
+            ".html",
+            ".inf",
+            ".rb",
+            ".py",
+            ".cs",
+            ".js",
+            ".bat",
+            ".css",
+            ".s",
+            ".cpp",
+            ".csv",
+            ".vue",
+        ]:
             return TextDocumentsLoader.read_text_file(file_path)
         elif file_path.suffix.lower() in [".msg"]:
             return TextDocumentsLoader.read_msg_file(file_path)
         else:
             raise ValueError("Unknown file type")
-        
+
     @staticmethod
     def get_supported_file_types() -> List[str]:
         """
@@ -49,74 +94,118 @@ class TextDocumentsLoader:
         Returns:
             List[str]: The list of supported file types.
         """
-        return ['.sh', '.json', '.sym', '.log', '.snippet', '.se', '.yml', '.snippets', '.lua', '.pdf', '.md', '.docx', '.yaml', '.inc', '.txt', '.ini', '.pas', '.pptx', '.map', '.php', '.xlsx', '.rtf', '.hpp', '.h', '.asm', '.xml', '.hh', '.sql', '.java', '.c', '.html', '.inf', '.rb', '.py', '.cs', '.js', '.bat', '.css', '.s', '.cpp', '.csv', '.msg']    
-    
+        return [
+            ".sh",
+            ".json",
+            ".sym",
+            ".log",
+            ".snippet",
+            ".se",
+            ".yml",
+            ".snippets",
+            ".lua",
+            ".pdf",
+            ".md",
+            ".docx",
+            ".yaml",
+            ".inc",
+            ".txt",
+            ".ini",
+            ".pas",
+            ".pptx",
+            ".map",
+            ".php",
+            ".xlsx",
+            ".rtf",
+            ".hpp",
+            ".h",
+            ".asm",
+            ".xml",
+            ".hh",
+            ".sql",
+            ".java",
+            ".c",
+            ".html",
+            ".inf",
+            ".rb",
+            ".py",
+            ".cs",
+            ".js",
+            ".bat",
+            ".css",
+            ".s",
+            ".cpp",
+            ".csv",
+            ".msg",
+        ]
+
     @staticmethod
     def read_pcap_file(file_path):
         import dpkt
+
         result = ""  # Create an empty string to store the packet details
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             pcap = dpkt.pcap.Reader(f)
             for timestamp, buf in pcap:
                 eth = dpkt.ethernet.Ethernet(buf)
-                
+
                 # Extract Ethernet information
-                src_mac = ':'.join('{:02x}'.format(b) for b in eth.src)
-                dst_mac = ':'.join('{:02x}'.format(b) for b in eth.dst)
+                src_mac = ":".join("{:02x}".format(b) for b in eth.src)
+                dst_mac = ":".join("{:02x}".format(b) for b in eth.dst)
                 eth_type = eth.type
-                
+
                 # Concatenate Ethernet information to the result string
                 result += f"Timestamp: {timestamp}\n"
                 result += f"Source MAC: {src_mac}\n"
                 result += f"Destination MAC: {dst_mac}\n"
                 result += f"Ethernet Type: {eth_type}\n"
-                
+
                 # Check if packet is an IP packet
                 if isinstance(eth.data, dpkt.ip.IP):
                     ip = eth.data
-                    
+
                     # Extract IP information
                     src_ip = dpkt.ip.inet_to_str(ip.src)
                     dst_ip = dpkt.ip.inet_to_str(ip.dst)
                     ip_proto = ip.p
-                
+
                     # Concatenate IP information to the result string
                     result += f"Source IP: {src_ip}\n"
                     result += f"Destination IP: {dst_ip}\n"
                     result += f"IP Protocol: {ip_proto}\n"
-                    
+
                     # Check if packet is a TCP packet
                     if isinstance(ip.data, dpkt.tcp.TCP):
                         tcp = ip.data
-                        
+
                         # Extract TCP information
                         src_port = tcp.sport
                         dst_port = tcp.dport
-                        
+
                         # Concatenate TCP information to the result string
                         result += f"Source Port: {src_port}\n"
                         result += f"Destination Port: {dst_port}\n"
-                        
+
                         # Add more code here to extract and concatenate other TCP details if needed
-                        
+
                     # Check if packet is a UDP packet
                     elif isinstance(ip.data, dpkt.udp.UDP):
                         udp = ip.data
-                        
+
                         # Extract UDP information
                         src_port = udp.sport
                         dst_port = udp.dport
-                        
+
                         # Concatenate UDP information to the result string
                         result += f"Source Port: {src_port}\n"
                         result += f"Destination Port: {dst_port}\n"
-                        
+
                         # Add more code here to extract and concatenate other UDP details if needed
-                        
+
                     # Add more code here to handle other protocols if needed
-                    
-                result += '-' * 50 + '\n'  # Separator between packets
-                
+
+                result += "-" * 50 + "\n"  # Separator between packets
+
         return result  # Return the result string
 
     @staticmethod
@@ -138,41 +227,46 @@ class TextDocumentsLoader:
 
         def extract_text_from_pdf(file_path):
             text = ""
-            with open(file_path, 'rb') as pdf_file:
+            with open(file_path, "rb") as pdf_file:
                 pdf_reader = PyPDF2.PdfReader(pdf_file)
                 for page in pdf_reader.pages:
-                    text += page.extract_text() + "\n\n"  # Add extra newline between pages
+                    text += (
+                        page.extract_text() + "\n\n"
+                    )  # Add extra newline between pages
             return text
 
         def convert_to_markdown(text):
             # Convert headers
-            text = re.sub(r'^(.+)$\n={3,}', r'# \1', text, flags=re.MULTILINE)
-            text = re.sub(r'^(.+)$\n-{3,}', r'## \1', text, flags=re.MULTILINE)
-            
+            text = re.sub(r"^(.+)$\n={3,}", r"# \1", text, flags=re.MULTILINE)
+            text = re.sub(r"^(.+)$\n-{3,}", r"## \1", text, flags=re.MULTILINE)
+
             # Convert other potential headers (adjust as needed)
-            text = re.sub(r'^(\d+\.)\s+(.+)$', r'### \1 \2', text, flags=re.MULTILINE)
-            
+            text = re.sub(r"^(\d+\.)\s+(.+)$", r"### \1 \2", text, flags=re.MULTILINE)
+
             # Convert lists
-            text = re.sub(r'^\s*[•·-]\s+(.+)$', r'- \1', text, flags=re.MULTILINE)
-            text = re.sub(r'^\s*(\d+\.)\s+(.+)$', r'\1 \2', text, flags=re.MULTILINE)
-            
+            text = re.sub(r"^\s*[•·-]\s+(.+)$", r"- \1", text, flags=re.MULTILINE)
+            text = re.sub(r"^\s*(\d+\.)\s+(.+)$", r"\1 \2", text, flags=re.MULTILINE)
+
             # Convert tables (basic conversion, may need adjustment)
-            text = re.sub(r'(\|[^\n]+\|\n)+', lambda m: '|' + m.group(0).replace('\n', '\n|'), text)
-            
+            text = re.sub(
+                r"(\|[^\n]+\|\n)+",
+                lambda m: "|" + m.group(0).replace("\n", "\n|"),
+                text,
+            )
+
             # Add line breaks
-            text = text.replace('\n', '  \n')
-            
+            text = text.replace("\n", "  \n")
+
             return text
 
         # Extract text from the PDF
         raw_text = extract_text_from_pdf(file_path)
-        
+
         # Convert to Markdown
         markdown_text = convert_to_markdown(raw_text)
-        
+
         return markdown_text
 
-    
     @staticmethod
     def read_docx_file(file_path: Path) -> str:
         """
@@ -207,8 +301,8 @@ class TextDocumentsLoader:
             str: The content of the DOCX file.
         """
         try:
-            import pandas as pd
             import openpyxl
+            import pandas as pd
         except ImportError:
             pm.install("openpyxl", force_reinstall=True, upgrade=True)
             pm.install("pandas", force_reinstall=True, upgrade=True)
@@ -229,10 +323,11 @@ class TextDocumentsLoader:
             str: The content of the JSON file.
         """
         import json
-        with open(file_path, 'r', encoding='utf-8') as file:
+
+        with open(file_path, "r", encoding="utf-8") as file:
             data = str(json.load(file))
         return data
-    
+
     @staticmethod
     def read_csv_file(file_path: Path) -> str:
         """
@@ -242,9 +337,9 @@ class TextDocumentsLoader:
         Returns:
             str: The content of the CSV file.
         """
-        with open(file_path, 'r') as file:
+        with open(file_path, "r") as file:
             content = file.read()
-        return content   
+        return content
 
     @staticmethod
     def read_html_file(file_path: Path) -> str:
@@ -262,11 +357,11 @@ class TextDocumentsLoader:
         except ImportError:
             pm.install("beautifulsoup4", force_reinstall=True, upgrade=True)
             from bs4 import BeautifulSoup
-        with open(file_path, 'r') as file:
-            soup = BeautifulSoup(file, 'html.parser')
+        with open(file_path, "r") as file:
+            soup = BeautifulSoup(file, "html.parser")
             text = soup.get_text()
         return text
-    
+
     @staticmethod
     def read_pptx_file(file_path: Path) -> str:
         """
@@ -292,7 +387,7 @@ class TextDocumentsLoader:
                         for run in paragraph.runs:
                             text += run.text
         return text
-    
+
     @staticmethod
     def read_text_file(file_path: Path) -> str:
         """
@@ -305,9 +400,10 @@ class TextDocumentsLoader:
             str: The content of the text file.
         """
         # Implementation details omitted for brevity
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as file:
             content = file.read()
         return content
+
     @staticmethod
     def read_msg_file(file_path: Path) -> str:
         """
@@ -343,7 +439,7 @@ class TextDocumentsLoader:
         cc = f"Cc: {msg.cc}\n" if msg.cc else ""
         bcc = f"Bcc: {msg.bcc}\n" if msg.bcc else ""
         body = f"\n{msg.body}"
-        
+
         # Combine them into a single text string
         msg_text = subject + sender + to + cc + bcc + body
         return msg_text

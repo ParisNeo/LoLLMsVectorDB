@@ -7,16 +7,22 @@ Description: Contains the OpenAIVectorizer class for vectorizing text data using
 
 This file is part of the LoLLMsVectorDB project, a modular text-based database manager for retrieval-augmented generation (RAG), seamlessly integrating with the LoLLMs ecosystem.
 """
-from ascii_colors import ASCIIColors, trace_exception
-import openai
-import numpy as np
-from lollmsvectordb.vectorizer import Vectorizer
-from typing import List
-import os
+
 import json
+import os
+from typing import List
+
+import numpy as np
+import openai
+from ascii_colors import ASCIIColors, trace_exception
+
+from lollmsvectordb.vectorizer import Vectorizer
+
 
 class OpenAIVectorizer(Vectorizer):
-    def __init__(self, model_name: str = 'text-embedding-ada-002', api_key: str|None = None):
+    def __init__(
+        self, model_name: str = "text-embedding-ada-002", api_key: str | None = None
+    ):
         """
         Initializes the OpenAIVectorizer with a specified OpenAI model.
 
@@ -25,20 +31,27 @@ class OpenAIVectorizer(Vectorizer):
             model_name (str): The name of the OpenAI model to use for embeddings.
         """
         super().__init__("OpenAIVectorizer")
-        self.api_key = api_key or os.getenv('OPENAI_API_KEY')
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.model_name = model_name
 
         if not self.api_key:
-            ASCIIColors.error("OpenAI API key is missing. Please provide it either in the constructor or set it as an environment variable 'OPENAI_API_KEY'.")
+            ASCIIColors.error(
+                "OpenAI API key is missing. Please provide it either in the constructor or set it as an environment variable 'OPENAI_API_KEY'."
+            )
             self.fitted = False
         else:
-            self.parameters = {
-                "api_key": self.api_key,
-                "model_name": self.model_name
-            }
-            ASCIIColors.multicolor(["LollmsVectorDB>", f"Using OpenAI model {model_name} for embeddings."], [ASCIIColors.color_red, ASCIIColors.color_cyan], end="", flush=True)
+            self.parameters = {"api_key": self.api_key, "model_name": self.model_name}
+            ASCIIColors.multicolor(
+                ["LollmsVectorDB>", f"Using OpenAI model {model_name} for embeddings."],
+                [ASCIIColors.color_red, ASCIIColors.color_cyan],
+                end="",
+                flush=True,
+            )
             ASCIIColors.success("OK")
-            ASCIIColors.multicolor(["LollmsVectorDB>", f" Parameters:"], [ASCIIColors.color_red, ASCIIColors.color_bright_green])
+            ASCIIColors.multicolor(
+                ["LollmsVectorDB>", f" Parameters:"],
+                [ASCIIColors.color_red, ASCIIColors.color_bright_green],
+            )
             ASCIIColors.yellow(json.dumps(self.parameters, indent=4))
             self.fitted = True
 
@@ -63,18 +76,18 @@ class OpenAIVectorizer(Vectorizer):
             List[np.ndarray]: The list of OpenAI embeddings for each input text.
         """
         if not self.fitted:
-            ASCIIColors.error("OpenAIVectorizer is not properly initialized. Please check your API key.")
+            ASCIIColors.error(
+                "OpenAIVectorizer is not properly initialized. Please check your API key."
+            )
             return []
 
         embeddings = []
         try:
             for text in data:
                 response = openai.Embedding.create(
-                    input=text,
-                    model=self.model_name,
-                    api_key=self.api_key
+                    input=text, model=self.model_name, api_key=self.api_key
                 )
-                embedding = np.array(response['data'][0]['embedding'])
+                embedding = np.array(response["data"][0]["embedding"])
                 embeddings.append(embedding)
         except Exception as ex:
             trace_exception(ex)
@@ -89,13 +102,13 @@ class OpenAIVectorizer(Vectorizer):
             "text-embedding-ada-002",
             "text-embedding-babbage-001",
             "text-embedding-curie-001",
-            "text-embedding-davinci-001"
+            "text-embedding-davinci-001",
         ]
 
     def __str__(self):
-        model_name = self.parameters['model_name']
-        return f'Lollms Vector DB OpenAIVectorizer. Using model {model_name}.'
+        model_name = self.parameters["model_name"]
+        return f"Lollms Vector DB OpenAIVectorizer. Using model {model_name}."
 
     def __repr__(self):
-        model_name = self.parameters['model_name']
-        return f'Lollms Vector DB OpenAIVectorizer. Using model {model_name}.'
+        model_name = self.parameters["model_name"]
+        return f"Lollms Vector DB OpenAIVectorizer. Using model {model_name}."

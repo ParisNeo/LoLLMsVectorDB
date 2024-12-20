@@ -1,5 +1,8 @@
-from typing import Optional, List
+from typing import List, Optional
+
 from lollmsvectordb.database_elements.document import Document
+
+
 class Chunk:
     """
     A class to represent a chunk in the database.
@@ -18,7 +21,16 @@ class Chunk:
         The number of tokens in the chunk.
     """
 
-    def __init__(self, doc: Document, vector: bytes, text: str, nb_tokens: int, id: Optional[int] = None, distance:float = 0, chunk_id:int = 0):
+    def __init__(
+        self,
+        doc: Document,
+        vector: bytes,
+        text: str,
+        nb_tokens: int,
+        id: Optional[int] = None,
+        distance: float = 0,
+        chunk_id: int = 0,
+    ):
         """
         Constructs all the necessary attributes for the Chunk object.
 
@@ -44,7 +56,6 @@ class Chunk:
         self.text = text
         self.nb_tokens = nb_tokens
         self.distance = distance
-
 
     def __repr__(self) -> str:
         """

@@ -8,15 +8,17 @@ Description: Contains the DirectoryBinding class for managing text data from a s
 This file is part of the LoLLMsVectorDB project, a modular text-based database manager for retrieval-augmented generation (RAG), seamlessly integrating with the LoLLMs ecosystem.
 """
 
-import os
 import hashlib
+import os
 import sqlite3
+
 from lollmsvectordb.text_chunker import TextChunker
-from lollmsvectordb.vector_database import VectorDatabase
 from lollmsvectordb.text_document_loader import TextDocumentsLoader
+from lollmsvectordb.vector_database import VectorDatabase
+
 
 class DirectoryBinding:
-    def __init__(self, directory_path, vector_database:VectorDatabase, chunk_size=512):
+    def __init__(self, directory_path, vector_database: VectorDatabase, chunk_size=512):
         self.directory_path = directory_path
         self.vector_database = vector_database
         self.file_hashes = {}
@@ -25,7 +27,7 @@ class DirectoryBinding:
 
     def _hash_file(self, file_path):
         hasher = hashlib.md5()
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             buf = f.read()
             hasher.update(buf)
         return hasher.hexdigest()
@@ -38,7 +40,10 @@ class DirectoryBinding:
                 current_files.add(file_path)
                 file_hash = self._hash_file(file_path)
 
-                if file_path not in self.file_hashes or self.file_hashes[file_path] != file_hash:
+                if (
+                    file_path not in self.file_hashes
+                    or self.file_hashes[file_path] != file_hash
+                ):
                     self.file_hashes[file_path] = file_hash
                     text = self.text_loader.read_file(file)
                     chunks = self.text_chunker._get_text_chunks(text)
@@ -56,5 +61,7 @@ class DirectoryBinding:
 
     def search(self, query, n_results=5):
         results = self.vector_database.search(query, n_results)
-        return [(meta.split(':')[0], int(meta.split(':')[1]), distance) for _, meta, distance in results]
-
+        return [
+            (meta.split(":")[0], int(meta.split(":")[1]), distance)
+            for _, meta, distance in results
+        ]

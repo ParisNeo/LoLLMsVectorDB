@@ -8,10 +8,13 @@ Description: Contains the TFIDFVectorizer class for vectorizing text data.
 This file is part of the LoLLMsVectorDB project, a modular text-based database manager for retrieval-augmented generation (RAG), seamlessly integrating with the LoLLMs ecosystem.
 """
 
-import numpy as np
-from lollmsvectordb.vectorizer import Vectorizer
-from typing import List
 import math
+from typing import List
+
+import numpy as np
+
+from lollmsvectordb.vectorizer import Vectorizer
+
 
 class TFIDFVectorizer(Vectorizer):
     def __init__(self):
@@ -19,9 +22,7 @@ class TFIDFVectorizer(Vectorizer):
         Initialize the TFIDFVectorizer with the name.
         """
         super().__init__("TFIDFVectorizer", True)
-        self.parameters = {
-            "model_name": ""
-        }
+        self.parameters = {"model_name": ""}
         self.vocab = {}
         self.idf = {}
         self.fitted = False
@@ -51,7 +52,9 @@ class TFIDFVectorizer(Vectorizer):
         self.idf = np.log(doc_count / (1 + word_doc_count))
         self.fitted = True
 
-    def _compute_tfidf(self, tf: np.ndarray, idf: np.ndarray, doc_len: int) -> np.ndarray:
+    def _compute_tfidf(
+        self, tf: np.ndarray, idf: np.ndarray, doc_len: int
+    ) -> np.ndarray:
         """
         Compute the TF-IDF vector for a single document.
 
@@ -90,10 +93,9 @@ class TFIDFVectorizer(Vectorizer):
             vectors.append(doc_vector)
 
         return vectors
-    
+
     def __str__(self):
-        return f'Lollms Vector DB TFIDFVectorizer.'
+        return f"Lollms Vector DB TFIDFVectorizer."
 
     def __repr__(self):
-        return f'Lollms Vector DB TFIDFVectorizer.'
-
+        return f"Lollms Vector DB TFIDFVectorizer."

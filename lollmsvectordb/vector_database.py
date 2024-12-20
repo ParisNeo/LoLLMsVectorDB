@@ -8,27 +8,29 @@ Description: Contains the VectorDatabase class for managing and searching vector
 This file is part of the LoLLMsVectorDB project, a modular text-based database manager for retrieval-augmented generation (RAG), seamlessly integrating with the LoLLMs ecosystem.
 """
 
-import numpy as np
-import sqlite3
 import hashlib
-from lollmsvectordb.algorithms.kneighbors import NearestNeighbors
-from lollmsvectordb.vectorizer import Vectorizer
-from lollmsvectordb.tokenizer import Tokenizer
-from lollmsvectordb.lollms_tokenizers.tiktoken_tokenizer import TikTokenTokenizer
-from typing import List, Tuple, Optional, Union
-from ascii_colors import ASCIIColors, trace_exception
-import pickle
 import json
+import pickle
+import sqlite3
 from pathlib import Path
+from typing import List, Optional, Tuple, Union
+
+import numpy as np
+from ascii_colors import ASCIIColors, trace_exception
 from tqdm import tqdm
 
-from lollmsvectordb.database_elements.document import Document
+from lollmsvectordb.algorithms.kneighbors import NearestNeighbors
 from lollmsvectordb.database_elements.chunk import Chunk
-
-from lollmsvectordb.text_chunker import TextChunker
+from lollmsvectordb.database_elements.document import Document
 from lollmsvectordb.llm_model import LLMModel
+from lollmsvectordb.lollms_tokenizers.tiktoken_tokenizer import \
+    TikTokenTokenizer
+from lollmsvectordb.text_chunker import TextChunker
+from lollmsvectordb.tokenizer import Tokenizer
+from lollmsvectordb.vectorizer import Vectorizer
 
 __version__ = 4
+
 
 def replace_nan_with_zero(arrays: List[np.ndarray]) -> List[int]:
     """
@@ -47,6 +49,7 @@ def replace_nan_with_zero(arrays: List[np.ndarray]) -> List[int]:
             nan_indices.append(i)
     return nan_indices
 
+
 def find_nan_indices(arrays: List[np.ndarray]) -> List[int]:
     """
     Find indices of arrays that contain NaN values.
@@ -59,6 +62,7 @@ def find_nan_indices(arrays: List[np.ndarray]) -> List[int]:
     """
     nan_indices = [i for i, array in enumerate(arrays) if np.isnan(array).any()]
     return nan_indices
+
 
 class VectorDatabase:
     """
@@ -82,7 +86,20 @@ class VectorDatabase:
         List of text corresponding to the vectors.
     """
 
-    def __init__(self, db_path: str, vectorizer: Vectorizer, tokenizer: Tokenizer|None=None, chunk_size: int = 512, overlap: int = 0, clean_chunks=True, n_neighbors: int = 5, algorithm: str = 'auto', metrics:str="euclidean", reset=False, model: Optional[LLMModel] = None):
+    def __init__(
+        self,
+        db_path: str,
+        vectorizer: Vectorizer,
+        tokenizer: Tokenizer | None = None,
+        chunk_size: int = 512,
+        overlap: int = 0,
+        clean_chunks=True,
+        n_neighbors: int = 5,
+        algorithm: str = "auto",
+        metrics: str = "euclidean",
+        reset=False,
+        model: Optional[LLMModel] = None,
+    ):
         """
         Initializes the VectorDatabase with the given parameters.
 
@@ -98,7 +115,7 @@ class VectorDatabase:
             The maximum size of each chunk in tokens (default is 512).
         clean_chunks : bool, optional
             If true, then the chunks will be cleaned by removing all extra line returns (default is True).
-            
+
         n_neighbors : int, optional
             Number of neighbors to use for k-neighbors queries (default is 5).
         algorithm : str, optional
@@ -124,28 +141,41 @@ class VectorDatabase:
         """
         self.db_path = db_path
         self.vectorizer = vectorizer
-        if tokenizer is None and ((hasattr(self.vectorizer, "tokenizer") and self.vectorizer.tokenizer is None) or not hasattr(self.vectorizer, "tokenizer")):
-            ASCIIColors.error("You did not provide a tokenizer and the vectorizer does not provide a tokenizer.\nPlease either privide a tokenizer or use a model that has a tokenizer.")
-        
-        if hasattr(self.vectorizer, "tokenizer") and self.vectorizer.tokenizer is not None:
+        if tokenizer is None and (
+            (
+                hasattr(self.vectorizer, "tokenizer")
+                and self.vectorizer.tokenizer is None
+            )
+            or not hasattr(self.vectorizer, "tokenizer")
+        ):
+            ASCIIColors.error(
+                "You did not provide a tokenizer and the vectorizer does not provide a tokenizer.\nPlease either privide a tokenizer or use a model that has a tokenizer."
+            )
+
+        if (
+            hasattr(self.vectorizer, "tokenizer")
+            and self.vectorizer.tokenizer is not None
+        ):
             self.tokenizer = self.vectorizer.tokenizer
         else:
             self.tokenizer = tokenizer
         self.n_neighbors = n_neighbors
         self.chunk_size = chunk_size
         self.algorithm = algorithm
-        self.metrics    = metrics
+        self.metrics = metrics
         self.clean_chunks = clean_chunks
         self.nn_model = None
-        self.textChunker = TextChunker(chunk_size=chunk_size, overlap=overlap, model=model)
-        self.documents:List[Document]=[]
-        self.chunks:List[Chunk]=[]
-        self.vectors:List[bytes] = []
-        self.chunk_ids:List[int] = []
+        self.textChunker = TextChunker(
+            chunk_size=chunk_size, overlap=overlap, model=model
+        )
+        self.documents: List[Document] = []
+        self.chunks: List[Chunk] = []
+        self.vectors: List[bytes] = []
+        self.chunk_ids: List[int] = []
 
         self.nn_fitted = False
 
-        if db_path!="":
+        if db_path != "":
             self._create_tables(reset=reset)
             self._load_vectors()
             try:
@@ -155,18 +185,31 @@ class VectorDatabase:
             try:
                 self.load_first_kneighbors_model()
             except Exception as ex:
-                if len(self.vectors)>0:
+                if len(self.vectors) > 0:
                     indices = find_nan_indices(self.vectors)
-                    self.nn_model = NearestNeighbors(n_neighbors=self.n_neighbors, algorithm=self.algorithm, metric='cosine')
+                    self.nn_model = NearestNeighbors(
+                        n_neighbors=self.n_neighbors,
+                        algorithm=self.algorithm,
+                        metric="cosine",
+                    )
                     self.nn_model.fit(self.vectors)
                     self.nn_fitted = True
                     self.store_kneighbors_model()
             self.build_index(False)
-        ASCIIColors.multicolor(["lollmsVectorDB>","Vectorizer status:",f"{self.vectorizer}"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
-        ASCIIColors.multicolor(["lollmsVectorDB>","Search model status:",f"{self.nn_model}"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
-        ASCIIColors.multicolor(["lollmsVectorDB>","lollmsVectorDB ",f"is ready"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
-        self.new_data=False
-        
+        ASCIIColors.multicolor(
+            ["lollmsVectorDB>", "Vectorizer status:", f"{self.vectorizer}"],
+            [ASCIIColors.color_red, ASCIIColors.color_cyan, ASCIIColors.color_yellow],
+        )
+        ASCIIColors.multicolor(
+            ["lollmsVectorDB>", "Search model status:", f"{self.nn_model}"],
+            [ASCIIColors.color_red, ASCIIColors.color_cyan, ASCIIColors.color_yellow],
+        )
+        ASCIIColors.multicolor(
+            ["lollmsVectorDB>", "lollmsVectorDB ", f"is ready"],
+            [ASCIIColors.color_red, ASCIIColors.color_cyan, ASCIIColors.color_yellow],
+        )
+        self.new_data = False
+
     def __del__(self):
         pass
 
@@ -182,14 +225,15 @@ class VectorDatabase:
             cursor = conn.cursor()
 
             if reset:
-                cursor.execute('DROP TABLE IF EXISTS documents')
-                cursor.execute('DROP TABLE IF EXISTS chunks')
-                cursor.execute('DROP TABLE IF EXISTS vectorizer_info')
-                cursor.execute('DROP TABLE IF EXISTS kneighbors_model')
-                cursor.execute('DROP TABLE IF EXISTS database_info')
+                cursor.execute("DROP TABLE IF EXISTS documents")
+                cursor.execute("DROP TABLE IF EXISTS chunks")
+                cursor.execute("DROP TABLE IF EXISTS vectorizer_info")
+                cursor.execute("DROP TABLE IF EXISTS kneighbors_model")
+                cursor.execute("DROP TABLE IF EXISTS database_info")
 
             # Create the documents table
-            cursor.execute('''
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS documents (
                     id INTEGER PRIMARY KEY,
                     hash TEXT UNIQUE NOT NULL,
@@ -200,9 +244,11 @@ class VectorDatabase:
                     FOREIGN KEY(category_id) REFERENCES categories(id),
                     FOREIGN KEY(subcategory_id) REFERENCES subcategories(id)
                 )
-            ''')
+            """
+            )
             # Create the document_summaries table
-            cursor.execute('''
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS document_summaries (
                     id INTEGER PRIMARY KEY,
                     document_id INTEGER NOT NULL,
@@ -210,9 +256,11 @@ class VectorDatabase:
                     summary TEXT NOT NULL,
                     FOREIGN KEY(document_id) REFERENCES documents(id)
                 )
-            ''')
+            """
+            )
             # Create the chunks table
-            cursor.execute('''
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS chunks (
                     id INTEGER PRIMARY KEY,
                     document_id INTEGER,
@@ -222,18 +270,22 @@ class VectorDatabase:
                     chunk_id INT, 
                     FOREIGN KEY(document_id) REFERENCES documents(id)
                 )
-            ''')
+            """
+            )
 
-            cursor.execute('''
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS nodes (
                     id INTEGER PRIMARY KEY,
                     name TEXT NOT NULL,
                     type TEXT,
                     UNIQUE(name, type)
                 )
-            ''')
+            """
+            )
 
-            cursor.execute('''
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS relations (
                     id INTEGER PRIMARY KEY,
                     source_node_id INTEGER,
@@ -242,9 +294,11 @@ class VectorDatabase:
                     FOREIGN KEY(source_node_id) REFERENCES nodes(id),
                     FOREIGN KEY(target_node_id) REFERENCES nodes(id)
                 )
-            ''')
+            """
+            )
 
-            cursor.execute('''
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS chunk_nodes (
                     chunk_id INTEGER,
                     node_id INTEGER,
@@ -252,27 +306,33 @@ class VectorDatabase:
                     FOREIGN KEY(chunk_id) REFERENCES chunks(id),
                     FOREIGN KEY(node_id) REFERENCES nodes(id)
                 )
-            ''')
+            """
+            )
             # Create the vectorizer_info table
-            cursor.execute('''
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS vectorizer_info (
                     id INTEGER PRIMARY KEY,
                     name TEXT NOT NULL,
                     parameters TEXT,
                     model BLOB
                 )
-            ''')
+            """
+            )
 
             # Create the kneighbors_model table
-            cursor.execute('''
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS kneighbors_model (
                     id INTEGER PRIMARY KEY,
                     model BLOB NOT NULL
                 )
-            ''')
+            """
+            )
 
             # Create the database_info table
-            cursor.execute('''
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS database_info (
                     id INTEGER PRIMARY KEY,
                     version INT NOT NULL,
@@ -280,57 +340,75 @@ class VectorDatabase:
                     model TEXT,
                     parameters TEXT
                 )
-            ''')
+            """
+            )
 
             # Create the categories table
-            cursor.execute('''
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS categories (
                     id INTEGER PRIMARY KEY,
                     name TEXT NOT NULL UNIQUE
                 )
-            ''')
+            """
+            )
 
             # Create the subcategories table
-            cursor.execute('''
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS subcategories (
                     id INTEGER PRIMARY KEY,
                     category_id INTEGER,
                     name TEXT NOT NULL,
                     FOREIGN KEY(category_id) REFERENCES categories(id)
                 )
-            ''')
+            """
+            )
 
             # Insert default category and subcategory
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT OR IGNORE INTO categories (id, name) VALUES (1, 'General')
-            ''')
+            """
+            )
 
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT OR IGNORE INTO subcategories (id, category_id, name) VALUES (1, 1, 'General')
-            ''')
+            """
+            )
             # Check if there is an entry in the database_info table
-            cursor.execute('SELECT COUNT(*) FROM database_info')
+            cursor.execute("SELECT COUNT(*) FROM database_info")
             count = cursor.fetchone()[0]
 
             # If there is no entry, insert the version number
             if count == 0:
                 # Check current database version and structure
-                cursor.execute('PRAGMA table_info(database_info)')
+                cursor.execute("PRAGMA table_info(database_info)")
                 columns = [col[1] for col in cursor.fetchall()]
-                if 'vectorizer_type' not in columns:
-                    cursor.execute(f'ALTER TABLE database_info ADD COLUMN vectorizer_type TEXT NOT NULL DEFAULT "{self.vectorizer.name}"')
-                cursor.execute('INSERT INTO database_info (version, vectorizer_type) VALUES (?,?)', (__version__, self.vectorizer.name))
+                if "vectorizer_type" not in columns:
+                    cursor.execute(
+                        f'ALTER TABLE database_info ADD COLUMN vectorizer_type TEXT NOT NULL DEFAULT "{self.vectorizer.name}"'
+                    )
+                cursor.execute(
+                    "INSERT INTO database_info (version, vectorizer_type) VALUES (?,?)",
+                    (__version__, self.vectorizer.name),
+                )
             else:
                 # Check current database version and structure
-                cursor.execute('PRAGMA table_info(database_info)')
+                cursor.execute("PRAGMA table_info(database_info)")
                 columns = [col[1] for col in cursor.fetchall()]
-                
-                if 'version' not in columns:
-                    cursor.execute(f'ALTER TABLE database_info ADD COLUMN version INTEGER NOT NULL DEFAULT {__version__}')
-                
-                if 'vectorizer_type' not in columns:
+
+                if "version" not in columns:
+                    cursor.execute(
+                        f"ALTER TABLE database_info ADD COLUMN version INTEGER NOT NULL DEFAULT {__version__}"
+                    )
+
+                if "vectorizer_type" not in columns:
                     try:
-                        cursor.execute(f'ALTER TABLE database_info ADD COLUMN vectorizer_type TEXT NOT NULL DEFAULT "{self.vectorizer.name}"')
+                        cursor.execute(
+                            f'ALTER TABLE database_info ADD COLUMN vectorizer_type TEXT NOT NULL DEFAULT "{self.vectorizer.name}"'
+                        )
                     except:
                         ASCIIColors.error("Couldn't update the database_info table")
             conn.commit()
@@ -349,8 +427,7 @@ class VectorDatabase:
         str
             The SHA-256 hash of the text.
         """
-        return hashlib.sha256(text.encode('utf-8')).hexdigest()
-
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def get_version(self) -> Optional[int]:
         """
@@ -364,7 +441,8 @@ class VectorDatabase:
             if db_file.exists():
                 with sqlite3.connect(self.db_path) as conn:
                     cursor = conn.cursor()
-                    cursor.execute('''
+                    cursor.execute(
+                        """
                         CREATE TABLE IF NOT EXISTS database_info (
                             id INTEGER PRIMARY KEY,
                             version INT NOT NULL,
@@ -373,8 +451,9 @@ class VectorDatabase:
                             parameters TEXT
                                    
                         )
-                    ''')
-                    cursor.execute('SELECT version FROM database_info WHERE id = 1')
+                    """
+                    )
+                    cursor.execute("SELECT version FROM database_info WHERE id = 1")
                     result = cursor.fetchone()
                     if result:
                         return result[0]
@@ -383,108 +462,140 @@ class VectorDatabase:
     def create_category(self, category_name):
         """
         Creates a new category in the categories table.
-        
+
         Args:
         cursor (sqlite3.Cursor): The database cursor.
         category_name (str): The name of the category to be created.
-        
+
         Returns:
         int: The ID of the newly created category.
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT INTO categories (name) VALUES (?)
-            ''', (category_name,))
+            """,
+                (category_name,),
+            )
         return cursor.lastrowid
 
     def create_subcategory(self, category_id, subcategory_name):
         """
         Creates a new subcategory in the subcategories table.
-        
+
         Args:
         cursor (sqlite3.Cursor): The database cursor.
         category_id (int): The ID of the category to which the subcategory belongs.
         subcategory_name (str): The name of the subcategory to be created.
-        
+
         Returns:
         int: The ID of the newly created subcategory.
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT INTO subcategories (category_id, name) VALUES (?, ?)
-            ''', (category_id, subcategory_name))
+            """,
+                (category_id, subcategory_name),
+            )
         return cursor.lastrowid
 
     def create_node(self, name, node_type, chunk_id=None):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             # Insert the node into the nodes table
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT OR IGNORE INTO nodes (name, type) VALUES (?, ?)
-            ''', (name, node_type))
-            
+            """,
+                (name, node_type),
+            )
+
             # Retrieve the node_id of the newly inserted or existing node
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT id FROM nodes WHERE name = ? AND type = ?
-            ''', (name, node_type))
+            """,
+                (name, node_type),
+            )
             node_id = cursor.fetchone()[0]
-            
+
             # If a chunk_id is provided, link the node to the chunk
             if chunk_id is not None:
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT OR IGNORE INTO chunk_nodes (chunk_id, node_id) VALUES (?, ?)
-                ''', (chunk_id, node_id))
-        
-        return node_id
+                """,
+                    (chunk_id, node_id),
+                )
 
+        return node_id
 
     def add_relation(self, source_node_id, target_node_id, relation_type):
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()        
+            cursor = conn.cursor()
             # Insert the relation into the relations table
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT INTO relations (source_node_id, target_node_id, relation_type) VALUES (?, ?, ?)
-            ''', (source_node_id, target_node_id, relation_type))
+            """,
+                (source_node_id, target_node_id, relation_type),
+            )
 
     def get_linked_nodes(self, node_name):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
 
             # Retrieve the node_id of the given node name
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT id FROM nodes WHERE name = ?
-            ''', (node_name,))
+            """,
+                (node_name,),
+            )
             node_id = cursor.fetchone()
-            
+
             if node_id is None:
                 return "Node not found", {}
-            
+
             node_id = node_id[0]
-            
+
             # Retrieve the linked nodes and their relations
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT n2.name, r.relation_type
                 FROM nodes n1
                 JOIN relations r ON n1.id = r.source_node_id
                 JOIN nodes n2 ON r.target_node_id = n2.id
                 WHERE n1.id = ?
-            ''', (node_id,))
-            
+            """,
+                (node_id,),
+            )
+
             linked_nodes = cursor.fetchall()
-            
+
             # Format the results as text
             text_result = f"Nodes linked to '{node_name}':\n"
             dict_result = {"node_name": node_name, "linked_nodes": []}
-            
+
             for node, relation in linked_nodes:
                 text_result += f"- {node} (Relation: {relation})\n"
                 dict_result["linked_nodes"].append({"node": node, "relation": relation})
-            
+
         return text_result, dict_result
-     
-    def add_document(self, title: str, text: str, path: Union[str, Path]="unknown", force_update=False, min_nb_tokens_in_chunk=1, category_id=None, subcategory_id=None):
+
+    def add_document(
+        self,
+        title: str,
+        text: str,
+        path: Union[str, Path] = "unknown",
+        force_update=False,
+        min_nb_tokens_in_chunk=1,
+        category_id=None,
+        subcategory_id=None,
+    ):
         """
         Adds a document and its chunks to the database.
 
@@ -504,60 +615,102 @@ class VectorDatabase:
             category_id = 1  # Default category ID
         if subcategory_id is None:
             subcategory_id = 1  # Default subcategory ID
-            
+
         doc_hash = self._hash_document(text)
-        if self.db_path!="":
+        if self.db_path != "":
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute('''
+                cursor.execute(
+                    """
                     SELECT id FROM documents WHERE hash = ?
-                ''', (doc_hash,))
+                """,
+                    (doc_hash,),
+                )
                 result = cursor.fetchone()
-                
+
                 if result is not None:
                     if not force_update:
                         print(f"Document with hash {doc_hash} already exists")
                         return
                     else:
-                        cursor.execute('''
+                        cursor.execute(
+                            """
                             DELETE FROM documents WHERE hash = ?
-                        ''', (doc_hash,))
+                        """,
+                            (doc_hash,),
+                        )
                         conn.commit()
 
                 doc = Document(doc_hash, title, path, len(self.documents))
                 self.documents.append(doc)
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT INTO documents (hash, title, path, category_id, subcategory_id) VALUES (?, ?, ?, ?, ?)
-                ''', (doc_hash, title, str(path), category_id, subcategory_id))
+                """,
+                    (doc_hash, title, str(path), category_id, subcategory_id),
+                )
                 document_id = cursor.lastrowid
 
-                ASCIIColors.multicolor(["lollmsVectorDB> ","Chunking file:",f"{title}"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
+                ASCIIColors.multicolor(
+                    ["lollmsVectorDB> ", "Chunking file:", f"{title}"],
+                    [
+                        ASCIIColors.color_red,
+                        ASCIIColors.color_cyan,
+                        ASCIIColors.color_yellow,
+                    ],
+                )
                 if self.textChunker.model:
-                    ASCIIColors.multicolor(["lollmsVectorDB> ","Preprocessing chunks is active"],[ASCIIColors.color_red,ASCIIColors.color_cyan, ASCIIColors.color_yellow])
+                    ASCIIColors.multicolor(
+                        ["lollmsVectorDB> ", "Preprocessing chunks is active"],
+                        [
+                            ASCIIColors.color_red,
+                            ASCIIColors.color_cyan,
+                            ASCIIColors.color_yellow,
+                        ],
+                    )
 
-                chunks:List[Chunk]= self.textChunker.get_text_chunks(text, doc, min_nb_tokens_in_chunk=min_nb_tokens_in_chunk)
+                chunks: List[Chunk] = self.textChunker.get_text_chunks(
+                    text, doc, min_nb_tokens_in_chunk=min_nb_tokens_in_chunk
+                )
                 self.chunks = chunks
 
                 for chunk in tqdm(chunks):
-                    if not self.vectorizer.requires_fitting or self.vectorizer.model is not None:
-                        vector = self.vectorizer.vectorize([chunk.text])[0].astype("float32")
+                    if (
+                        not self.vectorizer.requires_fitting
+                        or self.vectorizer.model is not None
+                    ):
+                        vector = self.vectorizer.vectorize([chunk.text])[0].astype(
+                            "float32"
+                        )
                         vector_blob = np.array(vector).tobytes()
-                        cursor.execute('''
+                        cursor.execute(
+                            """
                             INSERT INTO chunks (document_id, vector, text, nb_tokens, chunk_id) VALUES (?, ?, ?, ?, ?)
-                        ''', (document_id, vector_blob, chunk.text, chunk.nb_tokens, chunk.chunk_id))
+                        """,
+                            (
+                                document_id,
+                                vector_blob,
+                                chunk.text,
+                                chunk.nb_tokens,
+                                chunk.chunk_id,
+                            ),
+                        )
                     else:
-                        cursor.execute('''
+                        cursor.execute(
+                            """
                             INSERT INTO chunks (document_id, text, nb_tokens) VALUES (?, ?, ?)
-                        ''', (document_id, chunk.text, chunk.nb_tokens))
+                        """,
+                            (document_id, chunk.text, chunk.nb_tokens),
+                        )
                 conn.commit()
-                self.new_data=True
+                self.new_data = True
         else:
             doc = Document(doc_hash, title, path, len(self.documents))
             chunks = self.textChunker.get_text_chunks(text, doc, self.clean_chunks)
             for chunk in chunks:
                 chunk.chunk_id = len(self.chunks)
                 self.chunks.append(chunk)
-                
+
             self.documents.append(doc)
             for chunk in chunks:
                 chunk.vector = self.vectorizer.vectorize([chunk.text])[0]
@@ -569,7 +722,9 @@ class VectorDatabase:
             cursor = conn.cursor()
 
             if document_title is None and document_path is None:
-                raise ValueError("Either document_title or document_path must be provided")
+                raise ValueError(
+                    "Either document_title or document_path must be provided"
+                )
 
             query = "SELECT id, hash FROM documents WHERE "
             params = []
@@ -588,13 +743,14 @@ class VectorDatabase:
                 return None
             return documents[0][1]
 
-
     def get_document(self, document_title=None, document_path=None):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
 
             if document_title is None and document_path is None:
-                raise ValueError("Either document_title or document_path must be provided")
+                raise ValueError(
+                    "Either document_title or document_path must be provided"
+                )
 
             query = "SELECT id, title FROM documents WHERE "
             params = []
@@ -614,37 +770,37 @@ class VectorDatabase:
 
             result = []
             for doc_id, title in documents:
-                cursor.execute("SELECT text FROM chunks WHERE document_id = ? ORDER BY chunk_id", (doc_id,))
+                cursor.execute(
+                    "SELECT text FROM chunks WHERE document_id = ? ORDER BY chunk_id",
+                    (doc_id,),
+                )
                 chunks = cursor.fetchall()
                 document_text = "\n\n".join(chunk[0] for chunk in chunks)
                 result.append(f"Title: {title}\n\n{document_text}")
 
             return "\n\n".join(result)
-    
 
     def list_documents(self):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
 
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT d.title, d.path, COUNT(c.id) as num_chunks
                 FROM documents d
                 LEFT JOIN chunks c ON d.id = c.document_id
                 GROUP BY d.id
-            ''')
+            """
+            )
             documents = cursor.fetchall()
 
             result = []
             for title, path, num_chunks in documents:
-                result.append({
-                    'title': title,
-                    'path': path,
-                    'num_chunks': num_chunks
-                })
+                result.append({"title": title, "path": path, "num_chunks": num_chunks})
 
             return result
-        
-    def get_all_chunks(self)->List[Chunk]:
+
+    def get_all_chunks(self) -> List[Chunk]:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
 
@@ -654,9 +810,17 @@ class VectorDatabase:
             chunks = []
             for doc_id, title, path, hash in documents:
                 doc = Document(hash, title, path, doc_id)
-                cursor.execute("SELECT chunk_id, text, vector, nb_tokens  FROM chunks WHERE document_id = ? ORDER BY chunk_id", (doc_id,))
+                cursor.execute(
+                    "SELECT chunk_id, text, vector, nb_tokens  FROM chunks WHERE document_id = ? ORDER BY chunk_id",
+                    (doc_id,),
+                )
                 chunks = cursor.fetchall()
-                chunks.append([Chunk(doc, vector, text, nb_tokens, chunk_id=chunk_id) for chunk_id, text, vector, nb_tokens in chunks])
+                chunks.append(
+                    [
+                        Chunk(doc, vector, text, nb_tokens, chunk_id=chunk_id)
+                        for chunk_id, text, vector, nb_tokens in chunks
+                    ]
+                )
 
             return chunks
 
@@ -669,7 +833,10 @@ class VectorDatabase:
 
             result = []
             for doc_id, title in documents:
-                cursor.execute("SELECT text FROM chunks WHERE document_id = ? ORDER BY chunk_id", (doc_id,))
+                cursor.execute(
+                    "SELECT text FROM chunks WHERE document_id = ? ORDER BY chunk_id",
+                    (doc_id,),
+                )
                 chunks = cursor.fetchall()
                 document_text = "\n\n".join(chunk[0] for chunk in chunks)
                 result.append(f"Title: {title}\n\n{document_text}")
@@ -689,26 +856,33 @@ class VectorDatabase:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 # Delete chunks associated with the document
-                cursor.execute('''
+                cursor.execute(
+                    """
                     DELETE FROM chunks WHERE document_id IN (
                         SELECT id FROM documents WHERE hash = ?
                     )
-                ''', (doc_hash,))
+                """,
+                    (doc_hash,),
+                )
                 # Delete the document itself
-                cursor.execute('''
+                cursor.execute(
+                    """
                     DELETE FROM documents WHERE hash = ?
-                ''', (doc_hash,))
+                """,
+                    (doc_hash,),
+                )
                 conn.commit()
         else:
             # Remove document from in-memory storage
             try:
-                doc = [d for d in self.documents if d.hash==doc_hash][0]
-                self.documents = [d for d in self.documents if d.hash!=doc_hash]
-                self.chunks = [c for c in self.chunks if c.doc!=doc]
-                print(f"Document with hash '{doc_hash}' removed from in-memory storage.")
+                doc = [d for d in self.documents if d.hash == doc_hash][0]
+                self.documents = [d for d in self.documents if d.hash != doc_hash]
+                self.chunks = [c for c in self.chunks if c.doc != doc]
+                print(
+                    f"Document with hash '{doc_hash}' removed from in-memory storage."
+                )
             except:
                 ASCIIColors.error("Document Not found!")
-
 
     def remove_document_by_id(self, doc_id: int):
         """
@@ -723,13 +897,19 @@ class VectorDatabase:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 # Delete chunks associated with the document
-                cursor.execute('''
+                cursor.execute(
+                    """
                     DELETE FROM chunks WHERE document_id = ?
-                ''', (doc_id,))
+                """,
+                    (doc_id,),
+                )
                 # Delete the document itself
-                cursor.execute('''
+                cursor.execute(
+                    """
                     DELETE FROM documents WHERE id = ?
-                ''', (doc_id,))
+                """,
+                    (doc_id,),
+                )
                 conn.commit()
         else:
             # Remove document from in-memory storage
@@ -740,7 +920,6 @@ class VectorDatabase:
                 print(f"Document with ID '{doc_id}' removed from in-memory storage.")
             except IndexError:
                 ASCIIColors.error("Document Not found!")
-
 
     def verify_document(self, text: str) -> bool:
         """
@@ -757,37 +936,51 @@ class VectorDatabase:
             True if the document exists, False otherwise.
         """
         doc_hash = self._hash_document(text)
-        if self.db_path!="":
+        if self.db_path != "":
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute('''
+                cursor.execute(
+                    """
                     SELECT 1 FROM documents WHERE hash = ?
-                ''', (doc_hash,))
+                """,
+                    (doc_hash,),
+                )
                 return cursor.fetchone() is not None
         else:
-            return len([d for d in self.documents if d.hash==doc_hash])>0
-        
+            return len([d for d in self.documents if d.hash == doc_hash]) > 0
+
     def _load_vectors(self):
         """
         Loads vectors and their text from the database into memory.
         """
-        if self.db_path!="":
+        if self.db_path != "":
             try:
                 with sqlite3.connect(self.db_path) as conn:
                     cursor = conn.cursor()
-                    cursor.execute('''
+                    cursor.execute(
+                        """
                         SELECT vectorizer_type
                         FROM database_info 
-                    ''')
-                    rows = cursor.fetchall()     
-                    if rows[0][0]==self.vectorizer.name:       
-                        cursor.execute('''
+                    """
+                    )
+                    rows = cursor.fetchall()
+                    if rows[0][0] == self.vectorizer.name:
+                        cursor.execute(
+                            """
                             SELECT chunks.vector, chunks.chunk_id
                             FROM chunks 
-                        ''')
+                        """
+                        )
                         rows = cursor.fetchall()
-                        if len(rows)>0 and rows[0] and len(rows[0])>1 and rows[0][0]:
-                            self.vectors = [np.frombuffer(row[0], dtype=np.float32) for row in rows]
+                        if (
+                            len(rows) > 0
+                            and rows[0]
+                            and len(rows[0]) > 1
+                            and rows[0][0]
+                        ):
+                            self.vectors = [
+                                np.frombuffer(row[0], dtype=np.float32) for row in rows
+                            ]
                             self.chunk_ids = [row[1] for row in rows]
                         else:
                             self.vectors = []
@@ -798,10 +991,17 @@ class VectorDatabase:
                         self._update_vectors(True)
                         try:
                             parameters = json.dumps(self.vectorizer.parameters)
-                            cursor.execute('''
+                            cursor.execute(
+                                """
                                 UPDATE database_info
                                 SET vectorizer_type = ?, model = ?, parameters = ?
-                            ''', (self.vectorizer.name,self.vectorizer.parameters["model_name"],parameters))
+                            """,
+                                (
+                                    self.vectorizer.name,
+                                    self.vectorizer.parameters["model_name"],
+                                    parameters,
+                                ),
+                            )
                         except Exception as ex:
                             trace_exception(ex)
                             try:
@@ -810,26 +1010,40 @@ class VectorDatabase:
                                 columns = [column[1] for column in cursor.fetchall()]
                                 # Define the columns we need
                                 required_columns = {
-                                    'vectorizer_type': 'TEXT',
-                                    'model': 'TEXT',
-                                    'parameters': 'TEXT'
+                                    "vectorizer_type": "TEXT",
+                                    "model": "TEXT",
+                                    "parameters": "TEXT",
                                 }
-                                
+
                                 # Add any missing columns
-                                for column_name, column_type in required_columns.items():
+                                for (
+                                    column_name,
+                                    column_type,
+                                ) in required_columns.items():
                                     if column_name not in columns:
                                         try:
-                                            cursor.execute(f'''
+                                            cursor.execute(
+                                                f"""
                                                 ALTER TABLE database_info
                                                 ADD COLUMN {column_name} {column_type}
-                                            ''')
+                                            """
+                                            )
                                         except Exception as e:
-                                            print(f"Error adding column {column_name}: {str(e)}")                            
+                                            print(
+                                                f"Error adding column {column_name}: {str(e)}"
+                                            )
                                 parameters = json.dumps(self.vectorizer.parameters)
-                                cursor.execute('''
+                                cursor.execute(
+                                    """
                                     UPDATE database_info
                                     SET vectorizer_type = ?, model = ?, parameters = ?
-                                ''', (self.vectorizer.name,self.vectorizer.parameters["model_name"],parameters))
+                                """,
+                                    (
+                                        self.vectorizer.name,
+                                        self.vectorizer.parameters["model_name"],
+                                        parameters,
+                                    ),
+                                )
                             except Exception as ex:
                                 trace_exception(ex)
 
@@ -839,7 +1053,9 @@ class VectorDatabase:
                 trace_exception(ex)
 
         else:
-            ASCIIColors.error("Can't load vectors from database if you don't specify a file path")
+            ASCIIColors.error(
+                "Can't load vectors from database if you don't specify a file path"
+            )
 
     def _update_vectors(self, revectorize=False):
         """
@@ -847,37 +1063,48 @@ class VectorDatabase:
         """
         self.vectors = []
         self.chunk_ids = []
-        if self.db_path!="":
+        if self.db_path != "":
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute('SELECT id, text, vector FROM chunks')
+                cursor.execute("SELECT id, text, vector FROM chunks")
                 rows = cursor.fetchall()
-                if len(rows)>0:
-                    ASCIIColors.multicolor(["LollmsVectorDB> ", f"Vectorizing {len(rows)} chunks"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
+                if len(rows) > 0:
+                    ASCIIColors.multicolor(
+                        ["LollmsVectorDB> ", f"Vectorizing {len(rows)} chunks"],
+                        [ASCIIColors.color_red, ASCIIColors.color_cyan],
+                    )
                     if not self.vectorizer.fitted:
                         self.vectorizer.fit([r[1] for r in rows])
                     for row in tqdm(rows):
                         chunk_id, text, vector = row
                         if vector is None or revectorize:
-                            vector = np.array(self.vectorizer.vectorize([text])[0]).astype("float32")
+                            vector = np.array(
+                                self.vectorizer.vectorize([text])[0]
+                            ).astype("float32")
                             self.vectors.append(vector)
                             self.chunk_ids.append(chunk_id)
                             vector_blob = vector.tobytes()
-                            cursor.execute('UPDATE chunks SET vector = ? WHERE id = ?', (vector_blob, chunk_id))
+                            cursor.execute(
+                                "UPDATE chunks SET vector = ? WHERE id = ?",
+                                (vector_blob, chunk_id),
+                            )
                         else:
                             self.vectors.append(np.frombuffer(vector, dtype=np.float32))
                     conn.commit()
                 else:
-                    if len(self.chunks)>0:
+                    if len(self.chunks) > 0:
                         self.apply_vectorization()
         else:
             self.apply_vectorization()
-        
+
     def apply_vectorization(self):
         try:
             if not self.vectorizer.fitted:
                 self.vectorizer.fit([c.text for c in self.chunks])
-            ASCIIColors.multicolor(["LollmsVectorDB> ", f"Vectorizing {len(self.chunks)} chunks"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
+            ASCIIColors.multicolor(
+                ["LollmsVectorDB> ", f"Vectorizing {len(self.chunks)} chunks"],
+                [ASCIIColors.color_red, ASCIIColors.color_cyan],
+            )
             for chunk in tqdm(self.chunks):
                 vector = self.vectorizer.vectorize([chunk.text])[0]
                 chunk.vector = vector
@@ -891,28 +1118,30 @@ class VectorDatabase:
         """
         Store the KNeighbors model into the SQLite database as the only entry.
         """
-        if self.db_path=="":
+        if self.db_path == "":
             return
         # Serialize the model using pickle
         model_blob = pickle.dumps(self.nn_model)
-        
+
         # Connect to the database
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            
+
             # Clear out any existing entries
-            cursor.execute('DELETE FROM kneighbors_model')
-            
+            cursor.execute("DELETE FROM kneighbors_model")
+
             # Insert the model into the database
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT INTO kneighbors_model (model)
                 VALUES (?)
-            ''', (model_blob,))
-            
+            """,
+                (model_blob,),
+            )
+
             # Commit the transaction and close the connection
             conn.commit()
 
-    
     def load_first_kneighbors_model(self):
         """
         Load the first KNeighbors model from the SQLite database.
@@ -920,27 +1149,34 @@ class VectorDatabase:
         # Connect to the database
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            
+
             # Retrieve the first model from the database
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT model FROM kneighbors_model ORDER BY id LIMIT 1
-            ''')
+            """
+            )
             model_blob = cursor.fetchone()
-                        
+
             if model_blob is None:
                 ASCIIColors.yellow("No nneighbors model found in the database")
                 return
-            
+
             # Deserialize the model using pickle
             self.nn_model = pickle.loads(model_blob[0])
             self.nn_fitted = True
-        
+
     def load_vectorizer_model(self, force_new_vectorizer=True) -> Optional[str]:
-        ASCIIColors.multicolor(["LollmsVectorDB> ", "Loading vectorizer"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
-        if self.db_path!="":
+        ASCIIColors.multicolor(
+            ["LollmsVectorDB> ", "Loading vectorizer"],
+            [ASCIIColors.color_red, ASCIIColors.color_cyan],
+        )
+        if self.db_path != "":
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute('SELECT name, model, parameters FROM vectorizer_info ORDER BY id LIMIT 1')
+                cursor.execute(
+                    "SELECT name, model, parameters FROM vectorizer_info ORDER BY id LIMIT 1"
+                )
                 result = cursor.fetchone()
                 if not result:
                     self.store_vectorizer_model()
@@ -949,10 +1185,10 @@ class VectorDatabase:
                     if force_new_vectorizer:
                         return
                     else:
-                        if result[0]=="SemanticVectorizer":
+                        if result[0] == "SemanticVectorizer":
                             params = json.loads(result[2])
                             self.vectorizer = SemanticVectorizer(params["model_name"])
-                        elif  result[0]=="TFIDFVectorizer":
+                        elif result[0] == "TFIDFVectorizer":
                             self.vectorizer = TFIDFVectorizer()
                 else:
                     if self.vectorizer.requires_fitting and result[1]:
@@ -960,8 +1196,12 @@ class VectorDatabase:
                         self.vectorizer.fitted = True
                 return (result[0], result[1], result[2]) if result else ("", None, None)
         else:
-            return self.vectorizer.name, self.vectorizer.model, self.vectorizer.parameters
-        
+            return (
+                self.vectorizer.name,
+                self.vectorizer.model,
+                self.vectorizer.parameters,
+            )
+
     def store_vectorizer_model(self) -> bool:
         """
         Sets the vectorizer data in the database.
@@ -969,52 +1209,81 @@ class VectorDatabase:
         Returns:
             bool: True if the update was successful, False otherwise.
         """
-        if self.db_path!="":
+        if self.db_path != "":
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute('SELECT id FROM vectorizer_info ORDER BY id LIMIT 1')
+                cursor.execute("SELECT id FROM vectorizer_info ORDER BY id LIMIT 1")
                 result = cursor.fetchone()
                 if result:
                     first_id = result[0]
-                    cursor.execute('UPDATE vectorizer_info SET name = ?, model = ? WHERE id = ?', (self.vectorizer.name, self.vectorizer.parameters["model_name"], first_id))
+                    cursor.execute(
+                        "UPDATE vectorizer_info SET name = ?, model = ? WHERE id = ?",
+                        (
+                            self.vectorizer.name,
+                            self.vectorizer.parameters["model_name"],
+                            first_id,
+                        ),
+                    )
                     if self.vectorizer.parameters:
                         vectorizer_parameters = json.dumps(self.vectorizer.parameters)
-                        cursor.execute('UPDATE vectorizer_info SET parameters = ? WHERE id = ?', (vectorizer_parameters, first_id))
+                        cursor.execute(
+                            "UPDATE vectorizer_info SET parameters = ? WHERE id = ?",
+                            (vectorizer_parameters, first_id),
+                        )
                     conn.commit()
                     return True
                 else:
                     vectorizer_parameters = json.dumps(self.vectorizer.parameters)
-                    cursor.execute('INSERT INTO vectorizer_info (name,model,parameters) VALUES (?,?,?)', (self.vectorizer.name, self.vectorizer.parameters["model_name"], vectorizer_parameters))
+                    cursor.execute(
+                        "INSERT INTO vectorizer_info (name,model,parameters) VALUES (?,?,?)",
+                        (
+                            self.vectorizer.name,
+                            self.vectorizer.parameters["model_name"],
+                            vectorizer_parameters,
+                        ),
+                    )
                 return False
         else:
             return
 
-
-
-    def build_index(self, revectorize:bool=True):
+    def build_index(self, revectorize: bool = True):
         """
         Builds the nearest neighbors index using the loaded vectors.
         """
-        ASCIIColors.multicolor(["LollmsVectorDB> ", "Indexing database"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
+        ASCIIColors.multicolor(
+            ["LollmsVectorDB> ", "Indexing database"],
+            [ASCIIColors.color_red, ASCIIColors.color_cyan],
+        )
         self.load_vectorizer_model()
         if self.vectorizer.fitted:
-            ASCIIColors.multicolor(["LollmsVectorDB> ", "Vectorizer is ready"], [ASCIIColors.color_red, ASCIIColors.color_green])
-            if self.db_path!="" and Path(self.db_path).exists():
+            ASCIIColors.multicolor(
+                ["LollmsVectorDB> ", "Vectorizer is ready"],
+                [ASCIIColors.color_red, ASCIIColors.color_green],
+            )
+            if self.db_path != "" and Path(self.db_path).exists():
                 self._load_vectors()
-            
+
         else:
             if self.vectorizer.requires_fitting and self.vectorizer.model is None:
-                if self.db_path!="":
-                    ASCIIColors.multicolor(["LollmsVectorDB> ", "Fitting vectorizer"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
+                if self.db_path != "":
+                    ASCIIColors.multicolor(
+                        ["LollmsVectorDB> ", "Fitting vectorizer"],
+                        [ASCIIColors.color_red, ASCIIColors.color_cyan],
+                    )
                     with sqlite3.connect(self.db_path) as conn:
                         cursor = conn.cursor()
-                        cursor.execute('''
+                        cursor.execute(
+                            """
                             SELECT text FROM chunks
-                        ''')
+                        """
+                        )
                         chunks = cursor.fetchall()
-                        if len(chunks)==0:
-                            return 
-                        ASCIIColors.multicolor(["LollmsVectorDB> ", "Training vectorizer"], [ASCIIColors.color_red, ASCIIColors.color_cyan])
+                        if len(chunks) == 0:
+                            return
+                        ASCIIColors.multicolor(
+                            ["LollmsVectorDB> ", "Training vectorizer"],
+                            [ASCIIColors.color_red, ASCIIColors.color_cyan],
+                        )
                         try:
                             self.vectorizer.fit([c[0] for c in chunks])
                         except:
@@ -1027,7 +1296,6 @@ class VectorDatabase:
                     self._update_vectors(revectorize)
             else:
                 self._load_vectors()
-        
 
     def find_document_by_path(self, target_path: str) -> Optional[Document]:
         """
@@ -1046,12 +1314,30 @@ class VectorDatabase:
                 return document
         return None
 
-    def text2Chunk(self, text:str, document_title="", document_hash="", document_path="", document_id=0, nb_tokens=0, chunk_id=0, chunk_distance=0):
+    def text2Chunk(
+        self,
+        text: str,
+        document_title="",
+        document_hash="",
+        document_path="",
+        document_id=0,
+        nb_tokens=0,
+        chunk_id=0,
+        chunk_distance=0,
+    ):
         query_vector = self.vectorizer.vectorize([text])[0]
-        return Chunk(Document(document_hash, document_title, document_path, document_id),query_vector, text, nb_tokens, chunk_id, chunk_distance)
+        return Chunk(
+            Document(document_hash, document_title, document_path, document_id),
+            query_vector,
+            text,
+            nb_tokens,
+            chunk_id,
+            chunk_distance,
+        )
 
-
-    def search(self, query_data: str, n_results: int = 5, exclude_chunk_ids: List[int] = []) -> List[Chunk]:
+    def search(
+        self, query_data: str, n_results: int = 5, exclude_chunk_ids: List[int] = []
+    ) -> List[Chunk]:
         """
         Searches for the nearest neighbors of the query data.
 
@@ -1071,7 +1357,7 @@ class VectorDatabase:
         """
         results: List[Chunk] = []
 
-        if len(exclude_chunk_ids)==0:
+        if len(exclude_chunk_ids) == 0:
             # New lists to store the filtered results
             filtered_vectors = self.vectors
             filtered_chunk_ids = self.chunk_ids
@@ -1089,26 +1375,29 @@ class VectorDatabase:
         if len(filtered_vectors) < n_results:
             n_results = len(filtered_vectors)
 
-        if len(filtered_vectors)==0:
+        if len(filtered_vectors) == 0:
             return []
-        
 
-        self.nn_model = NearestNeighbors(n_neighbors=self.n_neighbors, algorithm=self.algorithm, metric='cosine')
+        self.nn_model = NearestNeighbors(
+            n_neighbors=self.n_neighbors, algorithm=self.algorithm, metric="cosine"
+        )
         self.nn_model.fit(filtered_vectors)
 
         query_vector = self.vectorizer.vectorize([query_data])[0]
-        distances, indices = self.nn_model.kneighbors([query_vector], n_neighbors=n_results)
+        distances, indices = self.nn_model.kneighbors(
+            [query_vector], n_neighbors=n_results
+        )
         if self.db_path != "":
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 for index, distance in zip(indices[0, :], distances[0, :]):
                     # SQL query to join documents and chunks tables and retrieve the required details
-                    query = '''
+                    query = """
                         SELECT d.title, d.path, d.hash, c.text, c.nb_tokens, c.chunk_id
                         FROM chunks c
                         JOIN documents d ON c.document_id = d.id
                         WHERE c.vector = ?
-                    '''
+                    """
 
                     # Execute the query with the provided vector and exclude_chunk_ids
                     cursor.execute(query, (self.vectors[index],))
@@ -1116,13 +1405,22 @@ class VectorDatabase:
                     if result:
                         doc = self.find_document_by_path(result[1])
                         if not doc:
-                            doc = Document(result[2], result[0], result[1], len(self.documents))
-                        chunk = Chunk(doc, self.vectors[index], result[3], result[4], distance=distance, chunk_id=result[5])
+                            doc = Document(
+                                result[2], result[0], result[1], len(self.documents)
+                            )
+                        chunk = Chunk(
+                            doc,
+                            self.vectors[index],
+                            result[3],
+                            result[4],
+                            distance=distance,
+                            chunk_id=result[5],
+                        )
                         results.append(chunk)
         else:
-            results=[]
-            for index in range(len(indices[0,:])):
-                self.chunks[indices[0,index]].distance=distances[0,index]
+            results = []
+            for index in range(len(indices[0, :])):
+                self.chunks[indices[0, index]].distance = distances[0, index]
                 results.append(self.chunks[index])
         return results
 
@@ -1133,31 +1431,35 @@ class VectorDatabase:
         """
         self.documents = []
         self.chunks = []
-        
+
         if self.db_path != "":
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                
+
                 # First load all documents
-                cursor.execute('''
+                cursor.execute(
+                    """
                     SELECT id, hash, title, path
                     FROM documents
-                ''')
+                """
+                )
                 doc_results = cursor.fetchall()
-                
+
                 # Create Document objects and store them
                 for doc_id, doc_hash, title, path in doc_results:
                     document = Document(doc_hash, title, path, doc_id)
                     self.documents.append(document)
-                
+
                 # Then load all chunks with their corresponding document information
-                cursor.execute('''
+                cursor.execute(
+                    """
                     SELECT c.vector, c.text, c.nb_tokens, c.chunk_id, c.document_id
                     FROM chunks c
                     JOIN documents d ON c.document_id = d.id
-                ''')
+                """
+                )
                 chunk_results = cursor.fetchall()
-                
+
                 # Create Chunk objects and store them
                 for vector, text, nb_tokens, chunk_id, doc_id in chunk_results:
                     # Find the corresponding document
@@ -1183,19 +1485,23 @@ class VectorDatabase:
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
+            cursor.execute(
+                """
                 DELETE FROM chunks WHERE text LIKE ?
-            ''', (f"{meta_prefix}%",))
+            """,
+                (f"{meta_prefix}%",),
+            )
             conn.commit()
-
-
 
     def get_document_id(self, name_or_path):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT id FROM documents WHERE title = ? OR path = ?
-            ''', (name_or_path, name_or_path))
+            """,
+                (name_or_path, name_or_path),
+            )
             result = cursor.fetchone()
             return result[0] if result else None
 
@@ -1206,12 +1512,15 @@ class VectorDatabase:
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT context, summary FROM document_summaries WHERE document_id = ?
-            ''', (document_id,))
+            """,
+                (document_id,),
+            )
             rows = cursor.fetchall()
 
-        summaries = [{'context': row[0], 'summary': row[1]} for row in rows]
+        summaries = [{"context": row[0], "summary": row[1]} for row in rows]
         return summaries
 
     def remove_summaries(self, name_or_path):
@@ -1221,9 +1530,12 @@ class VectorDatabase:
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
+            cursor.execute(
+                """
                 DELETE FROM document_summaries WHERE document_id = ?
-            ''', (document_id,))
+            """,
+                (document_id,),
+            )
             conn.commit()
         return True
 
@@ -1235,19 +1547,32 @@ class VectorDatabase:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             for summary in summaries:
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT INTO document_summaries (document_id, context, summary)
                     VALUES (?, ?, ?)
-                ''', (document_id, summary['context'], summary['summary']))
+                """,
+                    (document_id, summary["context"], summary["summary"]),
+                )
             conn.commit()
         return True
 
-    def plot_vector_distribution(self, chunks_lists: List[List[Chunk]], figsize=(12, 8), label_length=30, show=True, 
-                                colors=None, group_names=None, sizes=None, markers=None, show_labels=True):
+    def plot_vector_distribution(
+        self,
+        chunks_lists: List[List[Chunk]],
+        figsize=(12, 8),
+        label_length=30,
+        show=True,
+        colors=None,
+        group_names=None,
+        sizes=None,
+        markers=None,
+        show_labels=True,
+    ):
         """
         Plots the distribution of vectors in 2D space using PCA dimensionality reduction.
         Each list of chunks will be plotted with a different color, size, and marker.
-        
+
         Parameters:
         -----------
         chunks_lists : List[List[Chunk]]
@@ -1270,7 +1595,7 @@ class VectorDatabase:
             Common markers: 'o', 's', '^', 'v', '<', '>', 'D', 'p', '*', 'h', 'H', '+', 'x'
         show_labels : bool, optional (default=True)
             If True, displays text labels next to points. If False, hides labels.
-        
+
         Returns:
         --------
         fig, ax : tuple
@@ -1280,171 +1605,247 @@ class VectorDatabase:
         """
         import numpy as np
         import pipmaster as pm
+
         if not pm.is_installed("scikit-learn"):
             pm.install("scikit-learn")
         if not pm.is_installed("matplotlib"):
             pm.install("matplotlib")
         if not pm.is_installed("mplcursors"):
             pm.install("mplcursors")
-        from sklearn.decomposition import PCA
+        from typing import List
+
         import matplotlib.pyplot as plt
         from mplcursors import cursor
-        from typing import List
+        from sklearn.decomposition import PCA
+
         num_groups = len(chunks_lists)
-        
+
         # If colors not provided, use default color cycle
         if colors is None:
             colors = plt.cm.tab10(np.linspace(0, 1, num_groups))
-        
+
         # If group_names not provided, use default naming
         if group_names is None:
-            group_names = [f'Group {i + 1}' for i in range(num_groups)]
+            group_names = [f"Group {i + 1}" for i in range(num_groups)]
         elif len(group_names) != num_groups:
             raise ValueError("Number of group names must match number of chunk lists")
-        
+
         # If sizes not provided, use default size
         if sizes is None:
             sizes = [50] * num_groups
         elif len(sizes) != num_groups:
             raise ValueError("Number of sizes must match number of chunk lists")
-        
+
         # If markers not provided, use default marker
         if markers is None:
-            markers = ['o'] * num_groups
+            markers = ["o"] * num_groups
         elif len(markers) != num_groups:
             raise ValueError("Number of markers must match number of chunk lists")
-        
+
         # Get all vectors and texts from all chunks lists
         all_vectors = []
         all_texts = []
         group_indices = []  # To keep track of which group each vector belongs to
-        
+
         for group_idx, chunks in enumerate(chunks_lists):
             for chunk in chunks:
                 all_vectors.append(chunk.vector)
                 all_texts.append(chunk.text[:label_length] + "...")
                 group_indices.append(group_idx)
-        
+
         # Check if we have any vectors
         if not all_vectors:
-            raise ValueError("No vectors available to plot. Make sure you have added documents to the database.")
-        
+            raise ValueError(
+                "No vectors available to plot. Make sure you have added documents to the database."
+            )
+
         # Convert to numpy array and ensure proper shape
         all_vectors = np.array(all_vectors)
-        
+
         # If vectors is 1D, reshape it
         if len(all_vectors.shape) == 1:
             all_vectors = all_vectors.reshape(-1, 1)
-        
+
         # Check if we have enough dimensions for PCA
         n_components = min(2, all_vectors.shape[1]) if len(all_vectors.shape) > 1 else 1
-        
+
         # Reduce dimensionality to 2D using PCA
         pca = PCA(n_components=n_components)
-        
+
         try:
             vectors_2d = pca.fit_transform(all_vectors)
-            
+
             # If we only got 1 component, add a zero column
             if vectors_2d.shape[1] < 2:
-                vectors_2d = np.column_stack((vectors_2d, np.zeros(vectors_2d.shape[0])))
-            
+                vectors_2d = np.column_stack(
+                    (vectors_2d, np.zeros(vectors_2d.shape[0]))
+                )
+
             # Create the plot
             fig, ax = plt.subplots(figsize=figsize)
-            
+
             scatter_objects = []
-            
+
             # Plot points for each group with different colors, sizes, and markers
             for group_idx in range(num_groups):
                 group_mask = np.array(group_indices) == group_idx
                 group_vectors = vectors_2d[group_mask]
                 group_texts = np.array(all_texts)[group_mask]
-                
-                scatter = ax.scatter(group_vectors[:, 0], group_vectors[:, 1], 
-                                    c=[colors[group_idx]], alpha=0.6,
-                                    s=sizes[group_idx],
-                                    marker=markers[group_idx],
-                                    label=group_names[group_idx])
-                
+
+                scatter = ax.scatter(
+                    group_vectors[:, 0],
+                    group_vectors[:, 1],
+                    c=[colors[group_idx]],
+                    alpha=0.6,
+                    s=sizes[group_idx],
+                    marker=markers[group_idx],
+                    label=group_names[group_idx],
+                )
+
                 scatter_objects.append(scatter)
-                
+
                 if show_labels:
                     for i, txt in enumerate(group_texts):
-                        ax.annotate(txt, (group_vectors[i, 0], group_vectors[i, 1]), 
-                                    xytext=(5, 5), textcoords='offset points',
-                                    fontsize=8, alpha=0.7)
-            
-            ax.set_title('Distribution of Document Vectors in 2D Space')
-            ax.set_xlabel('First Principal Component')
-            ax.set_ylabel('Second Principal Component')
+                        ax.annotate(
+                            txt,
+                            (group_vectors[i, 0], group_vectors[i, 1]),
+                            xytext=(5, 5),
+                            textcoords="offset points",
+                            fontsize=8,
+                            alpha=0.7,
+                        )
+
+            ax.set_title("Distribution of Document Vectors in 2D Space")
+            ax.set_xlabel("First Principal Component")
+            ax.set_ylabel("Second Principal Component")
             ax.legend()
             ax.grid(True, alpha=0.3)
-            
+
             plt.tight_layout()
-            
+
             # Add hover functionality
             def on_hover(sel):
                 index = sel.index
                 group_idx = group_indices[index]
-                full_text = chunks_lists[group_idx][index % len(chunks_lists[group_idx])].text
-                sel.annotation.set_text(f"Group: {group_names[group_idx]}\nFull text: {full_text}")
+                full_text = chunks_lists[group_idx][
+                    index % len(chunks_lists[group_idx])
+                ].text
+                sel.annotation.set_text(
+                    f"Group: {group_names[group_idx]}\nFull text: {full_text}"
+                )
                 sel.annotation.get_bbox_patch().set(fc="white", alpha=0.8)
-            
+
             cursor_obj = cursor(scatter_objects, hover=True)
             cursor_obj.connect("add", on_hover)
-            
+
             if show:
                 plt.show()
                 return None
             return fig, ax
-        
+
         except Exception as e:
-            raise ValueError(f"Error during plotting: {str(e)}\nShape of vectors: {all_vectors.shape}")
+            raise ValueError(
+                f"Error during plotting: {str(e)}\nShape of vectors: {all_vectors.shape}"
+            )
 
 
 # Example usage
 if __name__ == "__main__":
     # Example with TFIDFVectorizer
     from lollmsvectordb import TFIDFVectorizer
-    from lollmsvectordb.lollms_vectorizers.semantic_vectorizer import SemanticVectorizer
-    from lollmsvectordb.lollms_vectorizers.ollama_vectorizer import OllamaVectorizer
+    from lollmsvectordb.lollms_vectorizers.ollama_vectorizer import \
+        OllamaVectorizer
+    from lollmsvectordb.lollms_vectorizers.semantic_vectorizer import \
+        SemanticVectorizer
 
-    
-    #db = VectorDatabase("vector_db.sqlite", TFIDFVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) # 
-    
-    db = VectorDatabase("vector_db.sqlite", OllamaVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) # 
+    # db = VectorDatabase("vector_db.sqlite", TFIDFVectorizer(), TikTokenTokenizer(),chunk_size=512, clean_chunks=True) #
+
+    db = VectorDatabase(
+        "vector_db.sqlite",
+        OllamaVectorizer(),
+        TikTokenTokenizer(),
+        chunk_size=512,
+        clean_chunks=True,
+    )  #
 
     # Add multiple documents to the database
     documents = [
         # Cuba visit related documents
-        ("Document 1", "President Biden visited Cuba in a historic diplomatic mission."),
-        ("Document 2", "The president of United States made a groundbreaking trip to Cuba in 2024."),
-        ("Document 3", "Pope Francis visited Cuba in 2015 to strengthen Catholic-Cuban relations."),
-        ("Document 4", "Ernest Hemingway frequently visited Cuba and lived there for many years."),
-        ("Document 5", "Barack Obama visited Cuba in 2016, marking the first US presidential visit in 88 years."),
-        
+        (
+            "Document 1",
+            "President Biden visited Cuba in a historic diplomatic mission.",
+        ),
+        (
+            "Document 2",
+            "The president of United States made a groundbreaking trip to Cuba in 2024.",
+        ),
+        (
+            "Document 3",
+            "Pope Francis visited Cuba in 2015 to strengthen Catholic-Cuban relations.",
+        ),
+        (
+            "Document 4",
+            "Ernest Hemingway frequently visited Cuba and lived there for many years.",
+        ),
+        (
+            "Document 5",
+            "Barack Obama visited Cuba in 2016, marking the first US presidential visit in 88 years.",
+        ),
         # Completely different topics
-        ("Document 6", "Scientists discovered a new species of butterfly in the Amazon rainforest."),
-        ("Document 7", "The latest smartphones feature advanced artificial intelligence capabilities."),
-        ("Document 8", "Global warming is causing significant changes in polar ice caps."),
-        ("Document 9", "The Renaissance period marked a cultural rebirth in European history."),
-        ("Document 10", "Traditional Japanese tea ceremonies follow strict protocols and rituals."),
-        
+        (
+            "Document 6",
+            "Scientists discovered a new species of butterfly in the Amazon rainforest.",
+        ),
+        (
+            "Document 7",
+            "The latest smartphones feature advanced artificial intelligence capabilities.",
+        ),
+        (
+            "Document 8",
+            "Global warming is causing significant changes in polar ice caps.",
+        ),
+        (
+            "Document 9",
+            "The Renaissance period marked a cultural rebirth in European history.",
+        ),
+        (
+            "Document 10",
+            "Traditional Japanese tea ceremonies follow strict protocols and rituals.",
+        ),
         # More Cuba-related documents
-        ("Document 11", "Che Guevara and Fidel Castro led the Cuban Revolution in 1959."),
-        ("Document 12", "Russian Premier Nikita Khrushchev visited Cuba during the Cold War."),
-        
+        (
+            "Document 11",
+            "Che Guevara and Fidel Castro led the Cuban Revolution in 1959.",
+        ),
+        (
+            "Document 12",
+            "Russian Premier Nikita Khrushchev visited Cuba during the Cold War.",
+        ),
         # More diverse topics
         ("Document 13", "The Great Wall of China stretches over 13,000 miles."),
-        ("Document 14", "Electric vehicles are becoming increasingly popular worldwide."),
-        ("Document 15", "Ancient Egyptians built the pyramids as tombs for their pharaohs."),
-        ("Document 16", "The human genome contains approximately 3 billion base pairs."),
+        (
+            "Document 14",
+            "Electric vehicles are becoming increasingly popular worldwide.",
+        ),
+        (
+            "Document 15",
+            "Ancient Egyptians built the pyramids as tombs for their pharaohs.",
+        ),
+        (
+            "Document 16",
+            "The human genome contains approximately 3 billion base pairs.",
+        ),
         ("Document 17", "Vincent van Gogh painted The Starry Night in 1889."),
-        
         # Additional Cuba visitors
         ("Document 18", "Jimmy Carter visited Cuba in 2002 to discuss human rights."),
-        ("Document 19", "The Rolling Stones performed a historic concert in Cuba in 2016."),
-        ("Document 20", "Canadian Prime Minister Justin Trudeau visited Cuba to maintain diplomatic ties.")
+        (
+            "Document 19",
+            "The Rolling Stones performed a historic concert in Cuba in 2016.",
+        ),
+        (
+            "Document 20",
+            "Canadian Prime Minister Justin Trudeau visited Cuba to maintain diplomatic ties.",
+        ),
     ]
 
     for title, text in documents:
@@ -1455,11 +1856,18 @@ if __name__ == "__main__":
 
     # Perform a search query
     query = "who visited cuba?"
-    results:List[Chunk] = db.search(query, n_results=5)
+    results: List[Chunk] = db.search(query, n_results=5)
     db.load_all_data()
-    db.plot_vector_distribution([db.chunks,[db.text2Chunk(query)], results], group_names=["chunks","query", "selected"], colors=['green','red', "blue"], markers=['o','o','x'], sizes=[50,50,150])
-
+    db.plot_vector_distribution(
+        [db.chunks, [db.text2Chunk(query)], results],
+        group_names=["chunks", "query", "selected"],
+        colors=["green", "red", "blue"],
+        markers=["o", "o", "x"],
+        sizes=[50, 50, 150],
+    )
 
     # Print the search results
     for chunk in results:
-        print(f"Title: {chunk.doc.title}, Text: {chunk.text}, Distance: {chunk.distance}, NB tokens: {chunk.nb_tokens}")
+        print(
+            f"Title: {chunk.doc.title}, Text: {chunk.text}, Distance: {chunk.distance}, NB tokens: {chunk.nb_tokens}"
+        )
