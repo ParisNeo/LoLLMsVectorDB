@@ -1,20 +1,33 @@
-from typing import List, Union
 from pathlib import Path
-from lollmsvectordb.remote_rag_database import SearchMode, LollmsRagDatabase
+from typing import List, Union
+
 import requests
+
+from lollmsvectordb.remote_rag_database import LollmsRagDatabase, SearchMode
+
+
 class LollmsLightRagConnector(LollmsRagDatabase):
     """LightRAG-specific implementation of the RAG database interface"""
-    
+
     def __init__(self, base_url: str = "http://localhost:9621"):
         """Initialize the connector with the base URL of the LightRAG service"""
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
 
-    def query(self, query_text: str, mode: SearchMode = SearchMode.hybrid, stream: bool = False) -> Union[str, bytes]:
-        endpoint = f"{self.base_url}/query/stream" if stream else f"{self.base_url}/query"
+    def query(
+        self,
+        query_text: str,
+        mode: SearchMode = SearchMode.hybrid,
+        stream: bool = False,
+        only_need_context: bool = True,
+    ) -> Union[str, bytes]:
+        endpoint = (
+            f"{self.base_url}/query/stream" if stream else f"{self.base_url}/query"
+        )
         payload = {
             "query": query_text,
             "mode": mode,
-            "stream": stream
+            "stream": stream,
+            "only_need_context": only_need_context,
         }
         response = requests.post(endpoint, json=payload)
         response.raise_for_status()
@@ -25,24 +38,21 @@ class LollmsLightRagConnector(LollmsRagDatabase):
 
     def upload_file(self, file_path: Union[str, Path], description: str = None) -> dict:
         file_path = Path(file_path)
-        data = {'file': open(file_path, 'rb')}
+        data = {"file": open(file_path, "rb")}
         if description:
-            data['description'] = description
+            data["description"] = description
         response = requests.post(f"{self.base_url}/documents/file", files=data)
         response.raise_for_status()
         return response.json()
 
     def upload_batch(self, file_paths: List[Union[str, Path]]) -> dict:
-        files = [('files', open(Path(file_path), 'rb')) for file_path in file_paths]
+        files = [("files", open(Path(file_path), "rb")) for file_path in file_paths]
         response = requests.post(f"{self.base_url}/documents/batch", files=files)
         response.raise_for_status()
         return response.json()
 
     def insert_text(self, text: str, description: str = None) -> dict:
-        payload = {
-            "text": text,
-            "description": description
-        }
+        payload = {"text": text, "description": description}
         response = requests.post(f"{self.base_url}/documents/text", json=payload)
         response.raise_for_status()
         return response.json()

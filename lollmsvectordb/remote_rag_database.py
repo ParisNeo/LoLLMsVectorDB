@@ -1,23 +1,32 @@
-from abc import ABC, abstractmethod
-import aiohttp
 import asyncio
-from typing import List, Union, AsyncGenerator
-from pathlib import Path
+from abc import ABC, abstractmethod
 from enum import Enum
+from pathlib import Path
+from typing import AsyncGenerator, List, Union
+
+import aiohttp
+
+
 class SearchMode(str, Enum):
     naive = "naive"
     local = "local"
     global_ = "global"
     hybrid = "hybrid"
 
+
 class LollmsRagDatabase(ABC):
     """Abstract base interface for RAG database operations"""
-    
+
     @abstractmethod
-    def query(self, query_text: str, mode: SearchMode = SearchMode.hybrid, stream: bool = False) -> Union[str, bytes]:
+    def query(
+        self,
+        query_text: str,
+        mode: SearchMode = SearchMode.hybrid,
+        stream: bool = False,
+    ) -> Union[str, bytes]:
         """Query the RAG system"""
         pass
-    
+
     @abstractmethod
     def upload_file(self, file_path: Union[str, Path], description: str = None) -> dict:
         """Upload a single file to the RAG system"""
