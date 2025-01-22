@@ -5,14 +5,14 @@ import tiktoken
 from ascii_colors import ASCIIColors
 
 from lollmsvectordb.tokenizer import Tokenizer
-
+from datetime import datetime
 
 class TikTokenTokenizer(Tokenizer):
     def __init__(self, encoding="gpt2"):
         super().__init__("TiktokenTokenizer")
         self.tokenizer = tiktoken.get_encoding(encoding)
         ASCIIColors.multicolor(
-            ["LollmsVectorDB> ", "TikTokenTokenizer initialized."],
+            [f"[LollmsVectorDB][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", "TikTokenTokenizer initialized."],
             [ASCIIColors.color_red, ASCIIColors.color_green],
         )
 

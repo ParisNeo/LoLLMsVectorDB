@@ -3,12 +3,12 @@ from typing import List
 
 import tiktoken
 from ascii_colors import ASCIIColors
-
+from datetime import datetime
 
 class Tokenizer:
     def __init__(self, name):
         ASCIIColors.multicolor(
-            ["LollmsVectorDB>", f" Using tokenizer {name}"],
+            [f"[LollmsVectorDB][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", f" Using tokenizer {name}"],
             [ASCIIColors.color_red, ASCIIColors.color_cyan],
         )
 

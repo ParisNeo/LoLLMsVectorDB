@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 from ascii_colors import ASCIIColors
-
+from datetime import datetime
 
 class Vectorizer(ABC):
     """
@@ -29,7 +29,7 @@ class Vectorizer(ABC):
         self.fitted = False
         self.requires_fitting = requires_fitting
         ASCIIColors.multicolor(
-            ["LollmsVectorDB>", f" Using vectorizer {name}"],
+            [f"[LollmsVectorDB][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", f" Using vectorizer {name}"],
             [ASCIIColors.color_red, ASCIIColors.color_cyan],
         )
 

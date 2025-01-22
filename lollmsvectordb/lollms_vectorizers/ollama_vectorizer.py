@@ -16,6 +16,7 @@ import requests
 from ascii_colors import ASCIIColors, trace_exception
 
 from lollmsvectordb.vectorizer import Vectorizer
+from datetime import datetime
 
 
 class OllamaVectorizer(Vectorizer):
@@ -35,14 +36,14 @@ class OllamaVectorizer(Vectorizer):
             "model_name": self.model_name,
         }
         ASCIIColors.multicolor(
-            ["LollmsVectorDB>", f"Using Ollama model {model_name} for embeddings."],
+            [f"[LollmsVectorDB][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", f"Using Ollama model {model_name} for embeddings."],
             [ASCIIColors.color_red, ASCIIColors.color_cyan],
             end="",
             flush=True,
         )
         ASCIIColors.success("OK")
         ASCIIColors.multicolor(
-            ["LollmsVectorDB>", f" Parameters:"],
+            [f"[LollmsVectorDB][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", f" Parameters:"],
             [ASCIIColors.color_red, ASCIIColors.color_bright_green],
         )
         ASCIIColors.yellow(json.dumps(self.parameters, indent=4))

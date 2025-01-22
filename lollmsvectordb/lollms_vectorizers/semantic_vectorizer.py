@@ -16,6 +16,7 @@ import pipmaster as pm
 from ascii_colors import ASCIIColors, trace_exception
 
 from lollmsvectordb.vectorizer import Vectorizer
+from datetime import datetime
 
 
 def import_modules():
@@ -74,7 +75,7 @@ class SemanticVectorizer(Vectorizer):
         """
         super().__init__("SemanticVectorizer")
         ASCIIColors.multicolor(
-            ["LollmsVectorDB>", f"Loading Pretrained Semantic model {model_name} ..."],
+            [f"[LollmsVectorDB][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", f"Loading Pretrained Semantic model {model_name} ..."],
             [ASCIIColors.color_red, ASCIIColors.color_cyan],
             end="",
             flush=True,
@@ -101,7 +102,7 @@ class SemanticVectorizer(Vectorizer):
                 ASCIIColors.success("OK")
 
                 ASCIIColors.multicolor(
-                    ["LollmsVectorDB>", f" Parameters:"],
+                    [f"[LollmsVectorDB][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", f" Parameters:"],
                     [ASCIIColors.color_red, ASCIIColors.color_bright_green],
                 )
                 ASCIIColors.yellow(json.dumps(self.parameters, indent=4))
@@ -113,7 +114,7 @@ class SemanticVectorizer(Vectorizer):
                 self.fitted = False
                 ASCIIColors.multicolor(
                     [
-                        "LollmsVectorDB>",
+                        f"[LollmsVectorDB][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]",
                         f" Couldn't load the embedding model. Either the model doesn't exist or the model exists but you have trouble connecting to hugging face. Please verify your internet connection or change the rag model in the settings.",
                     ],
                     [ASCIIColors.color_red, ASCIIColors.color_bright_green],

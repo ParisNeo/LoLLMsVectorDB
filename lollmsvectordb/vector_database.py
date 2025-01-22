@@ -29,6 +29,7 @@ from lollmsvectordb.text_chunker import TextChunker
 from lollmsvectordb.tokenizer import Tokenizer
 from lollmsvectordb.vectorizer import Vectorizer
 
+from datetime import datetime
 __version__ = 4
 
 
@@ -197,15 +198,15 @@ class VectorDatabase:
                     self.store_kneighbors_model()
             self.build_index(False)
         ASCIIColors.multicolor(
-            ["lollmsVectorDB>", "Vectorizer status:", f"{self.vectorizer}"],
+            [f"[LollmsVectorDB][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", "Vectorizer status:", f"{self.vectorizer}"],
             [ASCIIColors.color_red, ASCIIColors.color_cyan, ASCIIColors.color_yellow],
         )
         ASCIIColors.multicolor(
-            ["lollmsVectorDB>", "Search model status:", f"{self.nn_model}"],
+            [f"[LollmsVectorDB][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", "Search model status:", f"{self.nn_model}"],
             [ASCIIColors.color_red, ASCIIColors.color_cyan, ASCIIColors.color_yellow],
         )
         ASCIIColors.multicolor(
-            ["lollmsVectorDB>", "lollmsVectorDB ", f"is ready"],
+            [f"[LollmsVectorDB][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", "lollmsVectorDB ", f"is ready"],
             [ASCIIColors.color_red, ASCIIColors.color_cyan, ASCIIColors.color_yellow],
         )
         self.new_data = False
@@ -652,7 +653,7 @@ class VectorDatabase:
                 document_id = cursor.lastrowid
 
                 ASCIIColors.multicolor(
-                    ["lollmsVectorDB> ", "Chunking file:", f"{title}"],
+                    [f"[LollmsVectorDB][{ datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ", "Chunking file:", f"{title}"],
                     [
                         ASCIIColors.color_red,
                         ASCIIColors.color_cyan,
@@ -661,7 +662,7 @@ class VectorDatabase:
                 )
                 if self.textChunker.model:
                     ASCIIColors.multicolor(
-                        ["lollmsVectorDB> ", "Preprocessing chunks is active"],
+                        [f"[LollmsVectorDB][{ datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ", "Preprocessing chunks is active"],
                         [
                             ASCIIColors.color_red,
                             ASCIIColors.color_cyan,
@@ -1070,7 +1071,7 @@ class VectorDatabase:
                 rows = cursor.fetchall()
                 if len(rows) > 0:
                     ASCIIColors.multicolor(
-                        ["LollmsVectorDB> ", f"Vectorizing {len(rows)} chunks"],
+                        [f"[LollmsVectorDB][{ datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ", f"Vectorizing {len(rows)} chunks"],
                         [ASCIIColors.color_red, ASCIIColors.color_cyan],
                     )
                     if not self.vectorizer.fitted:
@@ -1102,7 +1103,7 @@ class VectorDatabase:
             if not self.vectorizer.fitted:
                 self.vectorizer.fit([c.text for c in self.chunks])
             ASCIIColors.multicolor(
-                ["LollmsVectorDB> ", f"Vectorizing {len(self.chunks)} chunks"],
+                [f"[LollmsVectorDB][{ datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ", f"Vectorizing {len(self.chunks)} chunks"],
                 [ASCIIColors.color_red, ASCIIColors.color_cyan],
             )
             for chunk in tqdm(self.chunks):
@@ -1168,7 +1169,7 @@ class VectorDatabase:
 
     def load_vectorizer_model(self, force_new_vectorizer=True) -> Optional[str]:
         ASCIIColors.multicolor(
-            ["LollmsVectorDB> ", "Loading vectorizer"],
+            [f"[LollmsVectorDB][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ", "Loading vectorizer"],
             [ASCIIColors.color_red, ASCIIColors.color_cyan],
         )
         if self.db_path != "":
@@ -1251,13 +1252,13 @@ class VectorDatabase:
         Builds the nearest neighbors index using the loaded vectors.
         """
         ASCIIColors.multicolor(
-            ["LollmsVectorDB> ", "Indexing database"],
+            [f"[LollmsVectorDB][{ datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ", "Indexing database"],
             [ASCIIColors.color_red, ASCIIColors.color_cyan],
         )
         self.load_vectorizer_model()
         if self.vectorizer.fitted:
             ASCIIColors.multicolor(
-                ["LollmsVectorDB> ", "Vectorizer is ready"],
+                [f"[LollmsVectorDB][{ datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ", "Vectorizer is ready"],
                 [ASCIIColors.color_red, ASCIIColors.color_green],
             )
             if self.db_path != "" and Path(self.db_path).exists():
@@ -1267,7 +1268,7 @@ class VectorDatabase:
             if self.vectorizer.requires_fitting and self.vectorizer.model is None:
                 if self.db_path != "":
                     ASCIIColors.multicolor(
-                        ["LollmsVectorDB> ", "Fitting vectorizer"],
+                        [f"[LollmsVectorDB][{ datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ", "Fitting vectorizer"],
                         [ASCIIColors.color_red, ASCIIColors.color_cyan],
                     )
                     with sqlite3.connect(self.db_path) as conn:
@@ -1281,7 +1282,7 @@ class VectorDatabase:
                         if len(chunks) == 0:
                             return
                         ASCIIColors.multicolor(
-                            ["LollmsVectorDB> ", "Training vectorizer"],
+                            [f"[LollmsVectorDB][{ datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ", "Training vectorizer"],
                             [ASCIIColors.color_red, ASCIIColors.color_cyan],
                         )
                         try:
