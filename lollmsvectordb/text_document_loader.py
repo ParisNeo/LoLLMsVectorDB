@@ -4,6 +4,8 @@ from typing import List
 
 import pipmaster as pm
 
+if not pm.is_installed("docling"):
+    pm.install("docling")
 
 class TextDocumentsLoader:
     @staticmethod
@@ -79,6 +81,10 @@ class TextDocumentsLoader:
             ".cpp",
             ".csv",
             ".vue",
+            ".png",
+            ".jpg",
+            ".tiff",
+            ".bmp"
         ]:
             return TextDocumentsLoader.read_text_file(file_path)
         elif file_path.suffix.lower() in [".msg"]:
@@ -219,53 +225,12 @@ class TextDocumentsLoader:
         Returns:
             str: The content of the PDF file in Markdown format.
         """
-        try:
-            import PyPDF2
-        except ImportError:
-            pm.install("PyPDF2", force_reinstall=True, upgrade=True)
-            import PyPDF2
+        from docling.document_converter import DocumentConverter
+        converter = DocumentConverter()
+        result = converter.convert(file_path)
+        text = result.document.export_to_markdown()
+        return text
 
-        def extract_text_from_pdf(file_path):
-            text = ""
-            with open(file_path, "rb") as pdf_file:
-                pdf_reader = PyPDF2.PdfReader(pdf_file)
-                for page in pdf_reader.pages:
-                    text += (
-                        page.extract_text() + "\n\n"
-                    )  # Add extra newline between pages
-            return text
-
-        def convert_to_markdown(text):
-            # Convert headers
-            text = re.sub(r"^(.+)$\n={3,}", r"# \1", text, flags=re.MULTILINE)
-            text = re.sub(r"^(.+)$\n-{3,}", r"## \1", text, flags=re.MULTILINE)
-
-            # Convert other potential headers (adjust as needed)
-            text = re.sub(r"^(\d+\.)\s+(.+)$", r"### \1 \2", text, flags=re.MULTILINE)
-
-            # Convert lists
-            text = re.sub(r"^\s*[•·-]\s+(.+)$", r"- \1", text, flags=re.MULTILINE)
-            text = re.sub(r"^\s*(\d+\.)\s+(.+)$", r"\1 \2", text, flags=re.MULTILINE)
-
-            # Convert tables (basic conversion, may need adjustment)
-            text = re.sub(
-                r"(\|[^\n]+\|\n)+",
-                lambda m: "|" + m.group(0).replace("\n", "\n|"),
-                text,
-            )
-
-            # Add line breaks
-            text = text.replace("\n", "  \n")
-
-            return text
-
-        # Extract text from the PDF
-        raw_text = extract_text_from_pdf(file_path)
-
-        # Convert to Markdown
-        markdown_text = convert_to_markdown(raw_text)
-
-        return markdown_text
 
     @staticmethod
     def read_docx_file(file_path: Path) -> str:
@@ -278,16 +243,13 @@ class TextDocumentsLoader:
         Returns:
             str: The content of the DOCX file.
         """
-        try:
-            from docx import Document
-        except ImportError:
-            pm.install("python-docx", force_reinstall=True, upgrade=True)
-            from docx import Document
-        doc = Document(file_path)
-        text = ""
-        for paragraph in doc.paragraphs:
-            text += paragraph.text + "\n"
+        from docling.document_converter import DocumentConverter
+        
+        converter = DocumentConverter()
+        result = converter.convert(file_path)
+        text = result.document.export_to_markdown()
         return text
+
 
     @staticmethod
     def read_xlsx_file(file_path: Path) -> str:
@@ -300,16 +262,12 @@ class TextDocumentsLoader:
         Returns:
             str: The content of the DOCX file.
         """
-        try:
-            import openpyxl
-            import pandas as pd
-        except ImportError:
-            pm.install("openpyxl", force_reinstall=True, upgrade=True)
-            pm.install("pandas", force_reinstall=True, upgrade=True)
-            import pandas as pd
-        xls = pd.read_excel(file_path)
-
-        return xls.to_string()
+        from docling.document_converter import DocumentConverter
+        
+        converter = DocumentConverter()
+        result = converter.convert(file_path)
+        text = result.document.export_to_markdown()
+        return text
 
     @staticmethod
     def read_json_file(file_path: Path) -> str:
@@ -352,14 +310,11 @@ class TextDocumentsLoader:
         Returns:
             str: The content of the HTML file.
         """
-        try:
-            from bs4 import BeautifulSoup
-        except ImportError:
-            pm.install("beautifulsoup4", force_reinstall=True, upgrade=True)
-            from bs4 import BeautifulSoup
-        with open(file_path, "r") as file:
-            soup = BeautifulSoup(file, "html.parser")
-            text = soup.get_text()
+        from docling.document_converter import DocumentConverter
+        
+        converter = DocumentConverter()
+        result = converter.convert(file_path)
+        text = result.document.export_to_markdown()
         return text
 
     @staticmethod
@@ -373,19 +328,11 @@ class TextDocumentsLoader:
         Returns:
             str: The content of the PPTX file.
         """
-        try:
-            from pptx import Presentation
-        except ImportError:
-            pm.install("python-pptx", force_reinstall=True, upgrade=True)
-            from pptx import Presentation
-        prs = Presentation(file_path)
-        text = ""
-        for slide in prs.slides:
-            for shape in slide.shapes:
-                if shape.has_text_frame:
-                    for paragraph in shape.text_frame.paragraphs:
-                        for run in paragraph.runs:
-                            text += run.text
+        from docling.document_converter import DocumentConverter
+        
+        converter = DocumentConverter()
+        result = converter.convert(file_path)
+        text = result.document.export_to_markdown()
         return text
 
     @staticmethod

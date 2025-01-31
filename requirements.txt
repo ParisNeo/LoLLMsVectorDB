@@ -3,6 +3,8 @@ tiktoken
 ascii_colors
 tqdm
 transformers
+torch
+docling
 PyPDF2
 openai
 dpkt
