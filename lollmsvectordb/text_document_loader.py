@@ -34,6 +34,12 @@ class TextDocumentsLoader:
             return TextDocumentsLoader.read_json_file(file_path)
         elif file_path.suffix.lower() == ".html":
             return TextDocumentsLoader.read_html_file(file_path)
+        elif file_path.suffix.lower() == ".png":
+            return TextDocumentsLoader.read_png_file(file_path)        
+        elif file_path.suffix.lower() == ".bmp":
+            return TextDocumentsLoader.read_bmp_file(file_path)        
+        elif file_path.suffix.lower() == ".jpg" or file_path.suffix.lower() == ".jpeg":
+            return TextDocumentsLoader.read_jpg_file(file_path)        
         elif file_path.suffix.lower() == ".pptx":
             return TextDocumentsLoader.read_pptx_file(file_path)
         elif file_path.suffix.lower() in [".pcap"]:
@@ -50,16 +56,13 @@ class TextDocumentsLoader:
             ".lua",
             ".pdf",
             ".md",
-            ".docx",
             ".yaml",
             ".inc",
             ".txt",
             ".ini",
             ".pas",
-            ".pptx",
             ".map",
             ".php",
-            ".xlsx",
             ".rtf",
             ".hpp",
             ".h",
@@ -113,6 +116,10 @@ class TextDocumentsLoader:
             ".pdf",
             ".md",
             ".docx",
+            ".xlsx",
+            ".png",
+            ".bmp",
+            ".jpg",
             ".yaml",
             ".inc",
             ".txt",
@@ -254,13 +261,13 @@ class TextDocumentsLoader:
     @staticmethod
     def read_xlsx_file(file_path: Path) -> str:
         """
-        Read a DOCX file and return its content as a string.
+        Read a XLSX file and return its content as a string.
 
         Args:
-            file_path (Path): The path to the DOCX file.
+            file_path (Path): The path to the XLSX file.
 
         Returns:
-            str: The content of the DOCX file.
+            str: The content of the XLSX file.
         """
         from docling.document_converter import DocumentConverter
         
@@ -317,6 +324,60 @@ class TextDocumentsLoader:
         text = result.document.export_to_markdown()
         return text
 
+    @staticmethod
+    def read_png_file(file_path: Path) -> str:
+        """
+        Read an HTML file and return its content as a string.
+
+        Args:
+            file_path (Path): The path to the png file.
+
+        Returns:
+            str: The content of the HTML file.
+        """
+        from docling.document_converter import DocumentConverter
+        
+        converter = DocumentConverter()
+        result = converter.convert(file_path)
+        text = result.document.export_to_markdown()
+        return text
+    
+    @staticmethod
+    def read_bmp_file(file_path: Path) -> str:
+        """
+        Read an bmp file and return its content as a string.
+
+        Args:
+            file_path (Path): The path to the bmp file.
+
+        Returns:
+            str: The content of the bmp file.
+        """
+        from docling.document_converter import DocumentConverter
+        
+        converter = DocumentConverter()
+        result = converter.convert(file_path)
+        text = result.document.export_to_markdown()
+        return text
+    
+    @staticmethod
+    def read_jpg_file(file_path: Path) -> str:
+        """
+        Read an jpg file and return its content as a string.
+
+        Args:
+            file_path (Path): The path to the jpg file.
+
+        Returns:
+            str: The content of the jpg file.
+        """
+        from docling.document_converter import DocumentConverter
+        
+        converter = DocumentConverter()
+        result = converter.convert(file_path)
+        text = result.document.export_to_markdown()
+        return text
+    
     @staticmethod
     def read_pptx_file(file_path: Path) -> str:
         """
