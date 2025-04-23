@@ -10,12 +10,10 @@ This file is part of the LoLLMsVectorDB project, a modular text-based database m
 
 import hashlib
 import os
-import sqlite3
 
 from lollmsvectordb.text_chunker import TextChunker
 from lollmsvectordb.text_document_loader import TextDocumentsLoader
 from lollmsvectordb.vector_database import VectorDatabase
-from lollmsvectordb.database_elements.document import Document
 
 
 class DirectoryBinding:
@@ -47,18 +45,15 @@ class DirectoryBinding:
                 ):
                     self.file_hashes[file_path] = file_hash
                     
-                    doc = Document(
-                        hash=file_hash,
-                        title=os.path.basename(file_path),
-                        path=file_path
+                    text, doc = self.text_loader.load_document(file_path)
+
+                    title = os.path.basename(file_path)
+                    self.vector_database.add_document(
+                        title=title,
+                        text=text,
+                        path=file_path,
+                        force_update=True
                     )
-
-                    text = self.text_loader.read_file(file_path)
-                    chunks = self.text_chunker.get_text_chunks(text, doc)
-
-                    for chunk in chunks:
-                        meta = f"{file_path}:{chunk.chunk_id}"
-                        self.vector_database.add_vector(chunk.text, meta)
 
         # Remove vectors for files that no longer exist
         removed_files = set(self.file_hashes.keys()) - current_files

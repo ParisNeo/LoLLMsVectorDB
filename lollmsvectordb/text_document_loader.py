@@ -1,6 +1,9 @@
+import hashlib
 import re
+import os
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
+from lollmsvectordb.database_elements.document import Document
 
 import pipmaster as pm
 
@@ -8,6 +11,21 @@ if not pm.is_installed("docling"):
     pm.install("docling")
 
 class TextDocumentsLoader:
+    def load_document(self, file_path: Path) -> Tuple[str, Document]:
+        """Load a document, create and return a Document object."""
+        hasher = hashlib.md5()
+        with open(file_path, "rb") as f:
+            buf = f.read()
+            hasher.update(buf)
+        file_hash = hasher.hexdigest()
+        
+        title = os.path.basename(file_path)
+        doc = Document(hash=file_hash, title=title, path=file_path)
+        
+        text = self.read_file(file_path)
+        
+        return text, doc
+
     @staticmethod
     def read_file(file_path: Path | str) -> str:
         """
