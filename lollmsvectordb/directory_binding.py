@@ -15,6 +15,7 @@ import sqlite3
 from lollmsvectordb.text_chunker import TextChunker
 from lollmsvectordb.text_document_loader import TextDocumentsLoader
 from lollmsvectordb.vector_database import VectorDatabase
+from lollmsvectordb.database_elements.document import Document
 
 
 class DirectoryBinding:
@@ -45,11 +46,19 @@ class DirectoryBinding:
                     or self.file_hashes[file_path] != file_hash
                 ):
                     self.file_hashes[file_path] = file_hash
+                    
+                    doc = Document(
+                        hash=file_hash,
+                        title=os.path.basename(file_path),
+                        path=file_path
+                    )
+
                     text = self.text_loader.read_file(file_path)
-                    chunks = self.text_chunker._get_text_chunks(text)
-                    for i, chunk in enumerate(chunks):
-                        meta = f"{file_path}:{i}"
-                        self.vector_database.add_vector(chunk, meta)
+                    chunks = self.text_chunker.get_text_chunks(text, doc)
+
+                    for chunk in chunks:
+                        meta = f"{file_path}:{chunk.chunk_id}"
+                        self.vector_database.add_vector(chunk.text, meta)
 
         # Remove vectors for files that no longer exist
         removed_files = set(self.file_hashes.keys()) - current_files

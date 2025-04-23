@@ -11,110 +11,30 @@ from lollmsvectordb.tokenizer import Tokenizer
 
 
 class TextChunker:
+    """
+    The Text Chunker provides methods to chunk texts, with parametrized
+    chunk sizes, overlap and optionnal LLM & Tokenizer support.
+    """
     def __init__(
         self,
         chunk_size: int = 512,
         overlap: int = 0,
         tokenizer: Optional[Tokenizer] = None,
         model: Optional[LLMModel] = None,
-    ):
+    ) -> None:
+        """
+        Initializes the Text Chunker
+        
+        Args:
+            chunk_size: The text chunks size (in tokens)
+            overlap: The overlap between two adjacent chunks (in tokens)
+            tokenizer: The tokenizer used to tokenize text
+            model: The model (unused)
+        """
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.tokenizer = tokenizer if tokenizer else TikTokenTokenizer()
         self.model = model
-
-    def get_text_chunks(
-        self,
-        text: str,
-        doc: Document,
-        clean_chunk: bool = True,
-        min_nb_tokens_in_chunk: int = 1,
-    ) -> List[Chunk]:
-        paragraphs = text.split("\n")
-        chunks = []
-        current_chunk = []
-        current_tokens = 0
-        chunk_id = 0
-
-        for paragraph in paragraphs:
-            if clean_chunk:
-                paragraph = paragraph.strip()
-            paragraph_tokens = len(self.tokenizer.tokenize(paragraph))
-
-            if paragraph_tokens > self.chunk_size:
-                # Handle large paragraphs
-                sentences = self.split_into_sentences(paragraph)
-                for sentence in sentences:
-                    sentence_tokens = len(self.tokenizer.tokenize(sentence))
-                    if sentence_tokens > self.chunk_size:
-                        # Split large sentences
-                        words = sentence.split()
-                        for i in range(0, len(words), self.chunk_size):
-                            sub_sentence = " ".join(words[i : i + self.chunk_size])
-                            sub_sentence_tokens = len(
-                                self.tokenizer.tokenize(sub_sentence)
-                            )
-                            self.add_to_chunks(
-                                sub_sentence,
-                                sub_sentence_tokens,
-                                current_chunk,
-                                current_tokens,
-                                chunks,
-                                doc,
-                                clean_chunk,
-                                min_nb_tokens_in_chunk,
-                            )
-                            current_chunk, current_tokens = self.reset_chunk(
-                                self.overlap
-                            )
-                            chunk_id += 1
-                    else:
-                        self.add_to_chunks(
-                            sentence,
-                            sentence_tokens,
-                            current_chunk,
-                            current_tokens,
-                            chunks,
-                            doc,
-                            clean_chunk,
-                            min_nb_tokens_in_chunk,
-                        )
-                        current_chunk, current_tokens = self.reset_chunk(self.overlap)
-                        chunk_id += 1
-            elif current_tokens + paragraph_tokens > self.chunk_size:
-                # Current chunk is full, start a new one
-                self.add_to_chunks(
-                    "\n\n".join(current_chunk),
-                    current_tokens,
-                    current_chunk,
-                    current_tokens,
-                    chunks,
-                    doc,
-                    clean_chunk,
-                    min_nb_tokens_in_chunk,
-                )
-                current_chunk, current_tokens = self.reset_chunk(self.overlap)
-                chunk_id += 1
-                current_chunk.append(paragraph)
-                current_tokens += paragraph_tokens
-            else:
-                current_chunk.append(paragraph)
-                current_tokens += paragraph_tokens
-
-        # Add any remaining content
-        if current_chunk and current_tokens > min_nb_tokens_in_chunk:
-            self.add_to_chunks(
-                "\n\n".join(current_chunk),
-                current_tokens,
-                current_chunk,
-                current_tokens,
-                chunks,
-                doc,
-                clean_chunk,
-                min_nb_tokens_in_chunk,
-            )
-
-        return chunks
 
     def split_into_sentences(self, paragraph):
         """
@@ -178,6 +98,15 @@ class TextChunker:
         clean_chunk: bool = True,
         min_nb_tokens_in_chunk: int = 1,
     ) -> List[Chunk]:
+        """Chunks the input text and stores it in a list.
+        
+        Args:
+            text: The input text to chunk.
+            doc: The document to associate the input text with.
+            clean_chunk: Whether to clean each paragraph from text before
+                chunking.
+            min_nb_tokens_in_chunk: Minimum number of tokens in a chunk.
+        """
         paragraphs = text.split("\n")
         chunks = []
         current_chunk = []
@@ -278,7 +207,8 @@ class TextChunker:
         doc: Document,
         clean_chunk: bool,
         min_nb_tokens_in_chunk: int,
-    ):
+    ) -> None:
+        """Adds a chunk to the chunk list"""
         if current_tokens > min_nb_tokens_in_chunk:
             chunk_text = "\n\n".join(current_chunk) if current_chunk else text
             if clean_chunk:
@@ -289,9 +219,11 @@ class TextChunker:
     def reset_chunk(
         self, current_chunk: List[str], overlap: int
     ) -> Tuple[List[str], int]:
-        if overlap > 0:
-            return current_chunk[-overlap:], sum(
-                len(self.tokenizer.tokenize(p)) for p in current_chunk[-overlap:]
+        """Resets the current chunk"""
+        if overlap > 0 and current_chunk:
+            overlap_elements = min(overlap, len(current_chunk))
+            return current_chunk[-overlap_elements:], sum(
+                len(self.tokenizer.tokenize(p)) for p in current_chunk[-overlap_elements:]
             )
         else:
             return [], 0
