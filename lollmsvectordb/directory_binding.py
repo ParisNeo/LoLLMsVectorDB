@@ -45,7 +45,7 @@ class DirectoryBinding:
                     or self.file_hashes[file_path] != file_hash
                 ):
                     self.file_hashes[file_path] = file_hash
-                    text = self.text_loader.read_file(file)
+                    text = self.text_loader.read_file(file_path)
                     chunks = self.text_chunker._get_text_chunks(text)
                     for i, chunk in enumerate(chunks):
                         meta = f"{file_path}:{i}"
