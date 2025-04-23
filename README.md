@@ -51,14 +51,13 @@ doc_path = "/path/to/your/folder"
 ollama_vectorizer = OllamaVectorizer(model_name="bge-m3", url="http://my_ollama_server:11434")
 
 # Create the vector database
-#? Where ?
 db = VectorDatabase("vector_db.sqlite", ollama_vectorizer)
 
 # Bind a directory to the vector database
 directory_binding = DirectoryBinding(doc_path, db)
 
 # Update the vector store with text data from the directory
-directory_binding.update_vector_store()
+directory_binding.update_vector_store()  # Comment this line for retrieval only.
 
 # Search for a query in the vector database
 results = directory_binding.search("What is the database you have access to about?")

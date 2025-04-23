@@ -64,8 +64,10 @@ class DirectoryBinding:
         self.vector_database.build_index()
 
     def search(self, query, n_results=5):
-        results = self.vector_database.search(query, n_results)
-        return [
-            (meta.split(":")[0], int(meta.split(":")[1]), distance)
-            for _, meta, distance in results
-        ]
+        chunks = self.vector_database.search(query, n_results)
+
+        results = []
+        for chunk in chunks:
+            results.append((chunk.doc.path, chunk.chunk_id, chunk.distance, chunk.text))
+
+        return results
