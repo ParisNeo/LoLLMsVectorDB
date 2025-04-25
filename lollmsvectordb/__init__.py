@@ -4,3 +4,4 @@ from lollmsvectordb.text_document_loader import TextDocumentsLoader
 from lollmsvectordb.tokenizer import Tokenizer
 from lollmsvectordb.vector_database import VectorDatabase
 from lollmsvectordb.vectorizer import Vectorizer
+from lollmsvectordb.directory_binding import DirectoryBinding

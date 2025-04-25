@@ -40,6 +40,30 @@ results = directory_binding.search("This is a sample text.")
 print(results)
 ```
 
+### Example with OllamaVectorizer and bge-m3 embedding model
+```python
+from lollmsvectordb import VectorDatabase, DirectoryBinding
+from lollmsvectordb.lollms_vectorizers.ollama_vectorizer import OllamaVectorizer
+
+doc_path = "/path/to/your/folder"
+
+# Initialize the vectorizer
+ollama_vectorizer = OllamaVectorizer(model_name="bge-m3", url="http://my_ollama_server:11434")
+
+# Create the vector database
+db = VectorDatabase("vector_db.sqlite", ollama_vectorizer)
+
+# Bind a directory to the vector database
+directory_binding = DirectoryBinding(doc_path, db)
+
+# Update the vector store with text data from the directory
+directory_binding.update_vector_store()  # Comment this line for retrieval only.
+
+# Search for a query in the vector database
+results = directory_binding.search("What is the database you have access to about?")
+print(results)
+```
+
 ### Adding New Vectorization Methods
 
 To add a new vectorization method, create a subclass of the `Vectorizer` class and implement the `vectorize` method.
